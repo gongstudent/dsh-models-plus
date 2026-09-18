@@ -1,7 +1,7 @@
 {
   "name": "dsh-models-plus",
   "version": "1.0.0",
-  "description": "Drop-in replacement for the DeepSeek Harness Models settings page: model-discovery search, bulk deselect, and a local-route switch that does not remount on every settings revision.",
+  "description": "DeepSeek Harness profile bundle: adds a configurable loopback local route proxy for OpenAI/Anthropic APIs, and enhances the Models settings page with search, bulk deselect, and smooth switching.",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
@@ -38,5 +38,8 @@
   "devDependencies": {
     "lightningcss": "^1.33.0",
     "tsdown": "^0.23.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.82.1"
   }
 }

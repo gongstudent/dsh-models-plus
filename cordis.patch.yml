@@ -1,17 +1,15 @@
-# dsh-models-plus - replaces the shipped Models settings page with this fork.
-#
-# The upstream row is disabled rather than redirected: a patch can override
-# `config`, `disabled`, and the other entry fields, but never a row's `name`
-# (vendor/include/src/index.ts skips `name` in its override loop and uses it only
-# as a mismatch guard), so pointing the shipped id at another package is not
-# expressible. Disable one row, insert another.
-#
-# Row id `models-plus` is this package's own; the upstream `ui-settings-models`
-# row stays in the tree, disabled, so removing this bundle restores it.
+# DeepSeek Harness profile bundle: dsh-models-plus
+# 1. Disables the shipped Models settings UI row.
+# 2. Replaces the shipped llm-pi-ai host adapter with this package,
+#    which provides the loopback local route (configurable port, default 8317) AND
+#    registers the customized Models settings UI into the browser graph.
 
 - id: ui-settings-models
   disabled: true
 
+- id: llm-pi-ai
+  disabled: true
+
 - insert:
-    - id: models-plus
+    - id: llm-pi-ai-local-route
       name: dsh-models-plus

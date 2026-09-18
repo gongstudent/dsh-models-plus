@@ -1,13 +1,13 @@
 /**
  * Package-owned invariant companion for `dsh-models-plus`.
- * @module dsh-models-plus/invariant
+ * @module @deepseek-ai/dsh-llm-pi-ai/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = 'dsh-models-plus'
+const PACKAGE_NAME = '@deepseek-ai/dsh-llm-pi-ai'
 
 /** Cordis companion plugin name. */
 export const name = 'models-plus-invariant'
@@ -15,9 +15,8 @@ export const name = 'models-plus-invariant'
 export const inject = ['invariants']
 
 /**
- * No runtime invariant: a nav-entry-only section plugin rendering a fixed
- * empty content column — it emits no cordis events and owns no cross-plugin
- * mutable relation.
+ * No runtime invariant: this package exposes no independent event sequence or mutable data relation
+ * beyond contracts enforced at its owning seam.
  */
 const install: InvariantInstaller = () => {}
 

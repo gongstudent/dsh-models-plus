@@ -2,117 +2,133 @@
 
 [English](README.md) | 中文
 
-DeepSeek Harness **模型**设置页的替代实现，打包成可安装的 profile bundle。
+DeepSeek Harness 的一体化插件包（Profile Bundle），提供两大核心能力：
+1. **本地路由代理（Loopback Local Route）**：提供端口可配置的本地代理服务（默认 `8317`），将 OpenAI 与 Anthropic 协议双向桥接到配置的模型服务，供 Cline、Claude Dev、Cursor 等外部客户端直接调用。
+2. **模型设置页增强（Models Settings UI）**：提供模型发现结果实时搜索、一键批量取消勾选，并彻底解决本地路由开关切换时的页面卡顿问题。
 
-之所以采取 fork 而非扩展：它携带的两处改动位于出厂页面的对话框和本地路由控件**内部**，
-没有任何扩展点能够触及。
+二合一开箱即用包：一次安装，宿主端网络路由与浏览器端界面增强同时生效。
 
-## 改动内容
+---
 
-| 改动 | 出厂行为 | 本包行为 |
+## 功能亮点
+
+### 1. 本地路由代理服务（支持端口自定义，默认 `8317`）
+- **双向协议转换**：支持将外部传入的 OpenAI（`/v1/chat/completions`, `/v1/responses`）和 Anthropic（`/v1/messages`）请求转发给 DSH 内配置的各家 provider。
+- **健康检查与路由发现**：通过 `GET /health` 查看当前就绪的路由列表与工作状态。
+- **端口自由配置**：支持在 Web 界面「设置」->「模型」->「本地路由」端口输入框中实时修改，或在 `settings.yaml` 中配置（支持 `1024`~`65535`，默认 `8317`）。修改后后台自动热重载生效，无需重启服务。
+
+### 2. 模型设置页界面增强
+| 功能 | 原版表现 | dsh-models-plus 表现 |
 |---|---|---|
-| 模型发现搜索 | 候选列表很长，无法过滤 | 搜索框按 id 过滤候选；**全不选**清除所有勾选，包括被过滤器隐藏的那些 |
-| 本地路由开关 | 每次 settings revision 变化都重新挂载（`key={revision}`），乐观状态随之丢失 | 保持挂载，显示乐观的开/关状态，且仅在存储的端口确实变化时才重同步端口输入框 |
-| 搜索无结果 | — | 显示"无匹配"提示，而不是空白列表 |
+| 模型发现搜索 | 候选列表很长，无法过滤 | 实时输入过滤，按 ID 秒搜候选模型 |
+| 批量反选 | 只能一个个手动点击取消 | 提供「全部取消勾选」按钮，连同被过滤隐藏的一并清空 |
+| 本地路由开关 | 每次配置版本变化就重新挂载导致卡顿闪烁 | 乐观状态更新，毫秒级响应，平滑不卡顿 |
+| 空结果提示 | 空白列表 | 友好的「无匹配模型」提示 |
 
-## 安装
+---
+
+## 安装指南（Windows / macOS / Linux 通用）
+
+### 环境要求
+- Node.js >= 22
+- Git
+- pnpm
+
+### 第一步：安装 DeepSeek Harness（指定稳定版本）
+对于直接通过 npm 安装的用户，推荐安装 `@deepseek-ai/dsh@0.1.1-rc.2`（此版本与本插件的底层服务接口完全对齐）：
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.1-rc.2
+```
+
+*(注：如果你使用的是本地源码构建的 DeepSeek Harness，直接使用即可，无需指定版本号)*。
+
+### 第二步：一键安装本插件包
+在终端执行：
 
 ```sh
 dsh plugin --profile web add github:gongstudent/dsh-models-plus
-dsh web
 ```
 
-等价地也可以写成完整 URL，或锁定到某个发布版本：
+也可以使用完整 git 仓库地址或指定版本 tag：
 
 ```sh
 dsh plugin --profile web add https://github.com/gongstudent/dsh-models-plus.git
 dsh plugin --profile web add github:gongstudent/dsh-models-plus#v1.0.0
 ```
 
-发布版本都有 tag；锁定之前先看一眼[所有 tag](https://github.com/gongstudent/dsh-models-plus/tags)确认最新版。
+> **首次安装放行提示（如遇拦截）**：pnpm 对带有安装脚本的依赖（如 `@google/genai`, `protobufjs`）有安全审查策略。如果安装时提示：
+> ```
+> [ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @google/genai, protobufjs
+> ```
+> 只需打开该 profile 的工作区配置（位于 `~/.dsh/profiles/web/pnpm-workspace.yaml`，Windows 上位于 `%USERPROFILE%\.dsh\profiles\web\pnpm-workspace.yaml`），加入放行声明：
+> ```yaml
+> allowBuilds:
+>   '@google/genai': true
+>   protobufjs: true
+> ```
+> 然后重新运行 `dsh plugin --profile web add ...` 即可。
 
-`dsh plugin` 会在 profile 目录内转发给 pnpm，然后按实际安装状态重新核对 profile 的
-bundle 列表。由于本包声明了 `dsh.bundle.patch`，它会自动加入层叠列表 —— 无需编辑任何文件。
+### 第三步：启动使用
+启动 Web 界面：
 
-执行安装的机器需要：`pnpm` 在 `PATH` 上（否则命令会报 `pnpm not found on PATH`），
-以及 `git`（`github:` 规格通过 git 拉取）。Windows 上两者都成立；`dsh plugin` 在那里
-已经通过 shell 调用 pnpm。
+```sh
+dsh web
+```
 
-`github:` 安装拉取的是已发布的仓库，因此包必须**公开**，且 `lib/` 必须已提交。安装时
-没有构建步骤 —— 仓库没有 `prepare` 脚本，pnpm 不会触发构建。
+本地路由代理与增强后的模型设置页将同时启用！
 
-卸载：
+---
+
+## 验证与使用
+
+### 1. 验证本地路由服务
+当 `dsh web` 运行且设置中启用了本地路由时，执行测试：
+
+```sh
+# 将 <端口> 替换为你配置的端口（默认为 8317）
+curl http://127.0.0.1:<端口>/health
+```
+
+成功返回示例：
+```json
+{"status":"ok","host":"127.0.0.1","routes":["cline","gemini"]}
+```
+
+### 2. 验证前端模型设置页
+1. 浏览器打开 Web 界面（默认 `http://127.0.0.1:3080`）。
+2. 点击左下角 **设置** -> **模型**。
+3. 在任意 Provider 点击 **发现模型**，即可体验搜索框与一键反选。
+
+### 3. 不启动服务查看插件树组合
+```sh
+dsh --profile web --dump-config
+```
+会显示 `ui-settings-models` 和 `llm-pi-ai` 已被置为 `disabled: true`，并成功挂载了 `dsh-models-plus`。
+
+---
+
+## 卸载
+
+如果需要卸载本插件并完全恢复官方原生组件：
 
 ```sh
 dsh plugin --profile web remove dsh-models-plus
 ```
 
-出厂的 `ui-settings-models` 行只是被**禁用**，从未被就地替换，因此卸载本 bundle 即可恢复。
+由于本插件是通过配置层禁用官方插件而非物理覆写，卸载后官方组件立即自动恢复。
 
-## 不启动服务也能验证组合结果
+---
 
-```sh
-dsh --profile web --dump-config | grep -A2 'models-plus'
-```
+## 架构原理
 
-## 接线方式
+本包采用**宿主 + 浏览器双面同构设计（Dual-Face Bundle）**：
+- **宿主侧（`lib/index.js`）**：替换原 `llm-pi-ai` 适配器，拉起可配置端口（默认 `8317`）的 HTTP 路由代理服务，负责跨协议流式转发与认证解析。
+- **浏览器侧（`lib/client.js`）**：通过 `package.json` 中的 `dsh.client` 自动接入前端运行时，作为无状态模块由 Cordis Web 动态加载并挂载到设置槽位。
+- **补丁声明（`cordis.patch.yml`）**：声明式管理插件拓扑，插拔无痕。
 
-三处必须一致，且都在 `package.json` 里：
+---
 
-1. `dsh.bundle.patch` —— 把包标记为 profile bundle，使 `dsh plugin add` 能激活它。
-2. `cordis.patch.yml` —— 禁用出厂的 `ui-settings-models` 行，并插入本包这一行。
-3. `dsh.client` + `exports["./client"]` —— 宿主侧的客户端模块注册表扫描加载器条目寻找前者，
-   并把后者指向的文件发布在 `/plugins/dsh-models-plus/client.js`。浏览器在运行时拉取它，
-   因此**不需要重新构建前端**。
+## 开源协议
 
-## 开发
-
-`src/` 由一个 DeepSeek Harness 检出生成，再构建到 `lib/`。
-
-```sh
-node scripts/prepare-src.mjs /path/to/deepseek-harness-fork   # 复制 + 改名
-pnpm install
-pnpm run build                                                # 产出 lib/index.js、lib/invariant.js、lib/client.js
-```
-
-`prepare-src` 刻意保持机械：对着更新的检出重新同步就是跑一次，再加一次 diff 审阅。
-
-**`prepare-src` 复制的是已经带有本地改动的检出。** 本仓库的 `patches/` 把这些改动存成了
-独立补丁，因此也可以改用不带这些改动的检出。请在**复制之前、在检出里**应用补丁 —— 补丁携带的是
-相对于 harness 根目录的路径，而且顺序有影响，因为两个补丁都会改 `ModelsSection.module.css`：
-
-```sh
-cd /path/to/harness-checkout
-git apply --3way /path/to/dsh-models-plus/patches/0002-local-route-switch.patch
-git apply --3way /path/to/dsh-models-plus/patches/0001-picker-search.patch
-node /path/to/dsh-models-plus/scripts/prepare-src.mjs .
-```
-
-该基线必须已经包含上游的本地路由功能（`feat(llm-pi-ai): add configurable local route proxy`）；
-`0002` 修改的正是那个提交引入的控件。把两个补丁应用到 `0e635bf^`，得到的 `src/` 与本包
-逐字节一致，唯一差异是 `src/invariant.ts` 里的改名。
-
-本 bundle 装好之后，harness 检出里的那两个本地提交就冗余了 —— 行为由本 bundle 提供，出厂那行
-已被禁用。请在那里把它们 revert 掉，让改动只存在于一处。
-
-`lib/` 是提交进仓库的。宿主发布的是构建产物，而 git 安装不会执行构建。
-
-## 兼容性
-
-**本包要求所运行的 DeepSeek Harness 本身已经带有本地路由。** 路由本身 —— `@deepseek-ai/dsh-llm-pi-ai`
-里的 loopback 监听器 —— 属于宿主侧，不在本包内，且**不存在于 npm 已发布的版本里**：
-`@deepseek-ai/dsh-llm-pi-ai` 的 `0.1.5-rc.2` 与 `0.1.6-alpha.2` 都没有导出 `LocalRouteServer`，
-也不含监听器代码。在这类构建上，模型设置页仍会渲染本地路由开关，但它是**失效**的 ——
-那边的 `llm-pi-ai` section schema 没有 `localRoute` 字段，写入会被丢弃。页面其余部分正常。
-
-DeepSeek Harness 处于预发布阶段，不作任何兼容承诺。本 bundle 按名字替换一个出厂包，因此某个版本
-若重命名 `ui-settings-models`、重构 `settings.section` 槽位、或改变槽位 props，都会让它失效 ——
-启动时会对未匹配上的补丁 id 发出警告，而不是静默地什么都不做，随后该页面直接不渲染。
-对着更新的检出重跑 `prepare-src` 即可恢复。
-
-## 已知限制
-
-- **这是整体 fork。** 上游对模型设置页自身的改动，在重跑 `prepare-src` 之前不会进入本包；
-  不存在部分覆盖。
-- **宿主侧是空的。** `src/index.ts` 不注册任何东西 —— 全部行为都在浏览器侧。
-- **不发布类型声明。** `exports` 只解析到构建后的 JavaScript。
+MIT

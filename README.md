@@ -2,130 +2,132 @@
 
 English | [中文](README.zh.md)
 
-A drop-in replacement for the DeepSeek Harness **Models** settings page, packaged as an
-installable profile bundle.
+A DeepSeek Harness profile bundle that provides:
+1. **Loopback Local Route** (configurable proxy server, default port `8317`) — seamlessly bridges DeepSeek Harness models with OpenAI- and Anthropic-compatible clients (e.g. Cline, Claude Dev, cursor, etc.).
+2. **Models Settings Page Enhancements** — search box for model discovery, one-click bulk deselect, and an optimistic toggle for the local route that eliminates UI stutter.
 
-It exists because the two changes it carries live *inside* the shipped page's dialog and
-local-route control, where no extension point reaches them — so the page is forked rather
-than extended.
+Packaged as a 2-in-1 drop-in bundle: install once, and both host-side local route proxy and frontend UI enhancements are fully activated.
 
-## What it changes
+---
 
-| Change | Upstream behaviour | Here |
+## Features
+
+### 1. Loopback Local Route Proxy (Configurable Port, default: `8317`)
+- **Protocol Translation**: Converts OpenAI (`/v1/chat/completions`, `/v1/responses`) and Anthropic (`/v1/messages`) requests to configured DSH provider profiles.
+- **Health Check & Route Discovery**: `GET /health` lists active provider routes and status.
+- **Port Customization**: Freely configurable via Web UI Settings -> Models -> Local Route port input or in `settings.yaml` (ports `1024`–`65535`, defaults to `8317`). Changes take effect dynamically without restarting the server.
+
+### 2. Models Settings Page Enhancements
+| Feature | Upstream Behaviour | dsh-models-plus |
 |---|---|---|
-| Model-discovery search | Long candidate list, no filtering | A search box filters candidates by id; **Deselect all** clears every pick, including ones hidden by the filter |
-| Local-route switch | Remounts on every settings revision (`key={revision}`), losing the optimistic state | Keeps the switch mounted, shows an optimistic on/off state, and resyncs the port field only when the stored port actually moves |
-| Empty search result | — | A "no match" line instead of a blank list |
+| Model Search | Long candidate list without filtering | Real-time search box filters candidate models by id |
+| Bulk Deselect | Click checkboxes one by one | **Deselect all** clears all picks, including those filtered out |
+| Local Route Switch | Stutters and remounts on settings revision | Optimistic on/off toggle with instant feedback and zero stutter |
+| Empty Results | Blank space | Clear "No matching models" indicator |
 
-## Install
+---
+
+## Installation (Windows / macOS / Linux)
+
+### Prerequisites
+- Node.js >= 22
+- Git
+- pnpm
+
+### Step 1: Install DeepSeek Harness (Pinned Version)
+For npm-based installations, install `@deepseek-ai/dsh@0.1.1-rc.2` (the stable base matching this host adapter):
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.1-rc.2
+```
+
+*(Note: If you build DeepSeek Harness from source checkout, no version pin is needed).*
+
+### Step 2: Install this Plugin Bundle
+In your terminal, run:
 
 ```sh
 dsh plugin --profile web add github:gongstudent/dsh-models-plus
-dsh web
 ```
 
-Same thing as an explicit URL, or pinned to a release:
+Or via HTTPS / pinned tag:
 
 ```sh
 dsh plugin --profile web add https://github.com/gongstudent/dsh-models-plus.git
 dsh plugin --profile web add github:gongstudent/dsh-models-plus#v1.0.0
 ```
 
-Releases are tagged; check [the tags](https://github.com/gongstudent/dsh-models-plus/tags) for the
-latest before pinning one.
+> **Note for first-time install**: pnpm enforces a supply-chain check on packages with install scripts (`@google/genai`, `protobufjs`). If pnpm prompts:
+> ```
+> [ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @google/genai, protobufjs
+> ```
+> Simply open your profile's workspace file (located at `~/.dsh/profiles/web/pnpm-workspace.yaml`, or `%USERPROFILE%\.dsh\profiles\web\pnpm-workspace.yaml` on Windows) and add:
+> ```yaml
+> allowBuilds:
+>   '@google/genai': true
+>   protobufjs: true
+> ```
+> Then re-run the `dsh plugin --profile web add ...` command.
 
-`dsh plugin` forwards to pnpm inside the profile directory and then reconciles the
-profile's bundle list against what is installed. Because this package declares
-`dsh.bundle.patch`, it joins the layer stack automatically — no file edits.
+### Step 3: Launch
+Start the Web UI:
 
-Prerequisites on the machine doing the install: `pnpm` on `PATH` (the command reports
-`pnpm not found on PATH` otherwise) and `git` (a `github:` spec is fetched over git). Both
-hold on Windows; `dsh plugin` already spawns pnpm through a shell there.
+```sh
+dsh web
+```
 
-A `github:` install fetches the repository as published, so the package must be **public**
-and `lib/` must be committed. There is no build step at install time — the repository has no
-`prepare` script, so pnpm does not run one.
+Both the Local Route proxy and the customized Models settings page will be active!
 
-To remove it:
+---
+
+## Verifying the Installation
+
+### 1. Verify Local Route Proxy
+With `dsh web` running and Local Route enabled in settings:
+
+```sh
+# Replace <port> with your configured port (default is 8317)
+curl http://127.0.0.1:<port>/health
+```
+
+Response:
+```json
+{"status":"ok","host":"127.0.0.1","routes":["..."]}
+```
+
+### 2. Verify Models Page UI
+1. Open the Web GUI in your browser (default: `http://127.0.0.1:3080`).
+2. Navigate to **Settings** -> **Models**.
+3. Under any provider (e.g. DeepSeek or Custom), click **Discover Models** to see the search bar and batch selection buttons.
+
+### 3. Verify Composition without Booting
+```sh
+dsh --profile web --dump-config | grep -B1 -A2 'llm-pi-ai\|ui-settings-models'
+```
+
+---
+
+## Uninstallation
+
+To remove the bundle and restore the original shipped components:
 
 ```sh
 dsh plugin --profile web remove dsh-models-plus
 ```
 
-The shipped `ui-settings-models` row is only *disabled*, never replaced in place, so
-removing the bundle restores it.
+The shipped `llm-pi-ai` and `ui-settings-models` were only *disabled* by the bundle patch, so removing the bundle immediately restores both.
 
-## Verify the composition without booting
+---
 
-```sh
-dsh --profile web --dump-config | grep -A2 'models-plus'
-```
+## Architecture
 
-## How it is wired
+This package is a dual-face bundle:
+- **Host half** (`lib/index.js`): Replaces `llm-pi-ai` to provide the configurable loopback proxy HTTP server (default `8317`), route dispatcher, and multi-provider protocol conversion.
+- **Browser half** (`lib/client.js`): Discovered automatically via `dsh.client` in `package.json`, compiled as a standalone CJS module loaded by Cordis Web module loader at runtime.
+- **Bundle patch** (`cordis.patch.yml`): Disables the upstream rows and mounts this unified plugin seamlessly.
 
-Three pieces have to agree, and all three are in `package.json`:
+---
 
-1. `dsh.bundle.patch` — marks the package as a profile bundle, so `dsh plugin add` activates it.
-2. `cordis.patch.yml` — disables the shipped `ui-settings-models` row and inserts this one.
-3. `dsh.client` + `exports["./client"]` — the host's client-module registry scans loader entries for
-   the first and serves the file named by the second at `/plugins/dsh-models-plus/client.js`.
-   The browser fetches it at runtime, so **no frontend rebuild is needed**.
+## License
 
-## Development
-
-`src/` is generated from a DeepSeek Harness checkout and then built to `lib/`.
-
-```sh
-node scripts/prepare-src.mjs /path/to/deepseek-harness-fork   # copy + rename
-pnpm install
-pnpm run build                                                # emits lib/index.js, lib/invariant.js, lib/client.js
-```
-
-`prepare-src` is mechanical on purpose: re-syncing against a newer checkout is one run plus a
-review of the diff.
-
-**`prepare-src` copies a checkout that already carries the local changes.** This repository's
-`patches/` holds those changes as standalone patches, so a checkout without them can be used
-instead. Apply the patches *in the checkout, before* copying — they carry harness-root-relative
-paths, and the order matters because both touch `ModelsSection.module.css`:
-
-```sh
-cd /path/to/harness-checkout
-git apply --3way /path/to/dsh-models-plus/patches/0002-local-route-switch.patch
-git apply --3way /path/to/dsh-models-plus/patches/0001-picker-search.patch
-node /path/to/dsh-models-plus/scripts/prepare-src.mjs .
-```
-
-That base must already contain upstream's local-route feature (`feat(llm-pi-ai): add configurable
-local route proxy`); `0002` edits the control that commit introduced. Applying both patches to
-`0e635bf^` reproduces this package's `src/` byte for byte apart from the rename in
-`src/invariant.ts`.
-
-Once this bundle is installed, the two local commits in the harness checkout are redundant — the
-bundle ships their behaviour and the shipped row is disabled. Revert them there so the change
-lives in exactly one place.
-
-`lib/` is committed. The host serves the built bundle, and a git install does not run a build.
-
-## Compatibility
-
-**This package requires a DeepSeek Harness build that already ships the local route.** The route
-itself — the loopback listener inside `@deepseek-ai/dsh-llm-pi-ai` — is host-side, is not part of
-this package, and is absent from the published npm releases: `@deepseek-ai/dsh-llm-pi-ai` at
-`0.1.5-rc.2` and `0.1.6-alpha.2` export no `LocalRouteServer` and contain no listener code. On
-such a build the Models page still renders the local-route switch, but the switch is inert — the
-`llm-pi-ai` section schema has no `localRoute` key there, so the write is dropped. The rest of
-the page works normally.
-
-DeepSeek Harness is pre-release and makes no compatibility promise. This bundle replaces a
-shipped package by name, so a release that renames `ui-settings-models`, restructures the
-`settings.section` slot, or changes the slot props will break it — the boot warns about an
-unmatched patch id rather than silently doing nothing, and the page then simply does not
-render. Re-run `prepare-src` against the newer checkout to recover.
-
-## Limitations
-
-- **The fork is total.** Upstream's own changes to the Models page do not reach this package
-  until `prepare-src` is re-run; there is no partial override.
-- **The host half is empty.** `src/index.ts` registers nothing — all behaviour is browser-side.
-- **No type declarations ship.** `exports` resolves to built JavaScript only.
+MIT

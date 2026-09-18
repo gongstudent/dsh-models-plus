@@ -1,12 +1,10 @@
 /**
- * Copy the Models settings page out of a DeepSeek Harness checkout into
- * ./src and rename it to this package.
+ * Re-sync sources from a DeepSeek Harness checkout into ./src.
  *
- * The page is a fork of `packages/client/ui-settings-models`: the upstream
- * package cannot be extended in place, because the two local changes live
- * inside its dialog and its local-route control rather than on a seam. Keeping
- * the copy mechanical is what makes re-syncing against a newer checkout a
- * `prepare-src` run plus a review of the diff.
+ * Copies:
+ * 1. packages/llm/llm-pi-ai/src/* -> ./src/ (host adapter + local route)
+ * 2. packages/client/ui-settings-models/src/* -> ./src/client/ (Models UI)
+ * 3. Rewrites package identifiers in invariant.ts
  *
  * Usage: node scripts/prepare-src.mjs [path-to-dsh-checkout]
  * @module dsh-models-plus/prepare-src
@@ -16,37 +14,36 @@ import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const UPSTREAM_PACKAGE = '@deepseek-ai/dsh-client-ui-settings-models'
-const UPSTREAM_PLUGIN = 'client-ui-settings-models-invariant'
-const PACKAGE = 'dsh-models-plus'
-const PLUGIN = 'models-plus-invariant'
-
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const checkout = resolve(process.argv[2] ?? process.env.DSH_CHECKOUT ?? join(root, '..', 'deepseek-harness-fork'))
-const source = join(checkout, 'packages', 'client', 'ui-settings-models', 'src')
+const hostSource = join(checkout, 'packages', 'llm', 'llm-pi-ai', 'src')
+const clientSource = join(checkout, 'packages', 'client', 'ui-settings-models', 'src')
 
-if (!existsSync(source)) {
-  process.stderr.write(`prepare-src: no upstream sources at ${source}\n`)
-  process.stderr.write('prepare-src: pass a DeepSeek Harness checkout path as the first argument\n')
+if (!existsSync(hostSource) || !existsSync(clientSource)) {
+  process.stderr.write('prepare-src: sources not found in checkout\n')
   process.exit(1)
 }
 
 const target = join(root, 'src')
-await rm(target, { recursive: true, force: true })
-await cp(source, target, { recursive: true })
 
-// Only identity strings are rewritten: the locale namespace, the slot id, and
-// every component name stay upstream's, because the shipped rows this package
-// shadows are disabled rather than co-mounted.
-const renamed = []
-for (const file of ['index.ts', 'invariant.ts']) {
-  const path = join(target, file)
-  const before = await readFile(path, 'utf8')
-  const after = before.split(UPSTREAM_PACKAGE).join(PACKAGE).split(UPSTREAM_PLUGIN).join(PLUGIN)
-  if (after !== before) {
-    await writeFile(path, after)
-    renamed.push(file)
-  }
+// Copy host files
+for (const f of ['adapter.ts', 'catalog.ts', 'config.ts', 'context.ts', 'discovery.ts', 'index.ts', 'invariant.ts', 'local-route.ts', 'provider.ts', 'replay.ts', 'stream.ts']) {
+  await cp(join(hostSource, f), join(target, f))
 }
 
-process.stdout.write(`prepare-src: copied ${source} -> src (renamed: ${renamed.join(', ') || 'none'})\n`)
+// Copy client files
+await cp(join(clientSource, 'client'), join(target, 'client'), { recursive: true })
+await cp(join(clientSource, 'onboarding-copy.ts'), join(target, 'onboarding-copy.ts'))
+await cp(join(clientSource, 'css-modules.d.ts'), join(target, 'css-modules.d.ts'))
+
+// Rename invariant identifiers
+const invPath = join(target, 'invariant.ts')
+const invContent = await readFile(invPath, 'utf8')
+await writeFile(
+  invPath,
+  invContent
+    .replace('@deepseek-ai/dsh-llm-pi-ai', 'dsh-models-plus')
+    .replace('llm-pi-ai-invariant', 'models-plus-invariant'),
+)
+
+console.log('prepare-src: completed successfully')
