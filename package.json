@@ -37,7 +37,8 @@
   },
   "devDependencies": {
     "lightningcss": "^1.33.0",
-    "tsdown": "^0.23.0"
+    "tsdown": "^0.23.0",
+    "@deepseek-ai/schemastery": "^3.18.1"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.82.1"
