@@ -1,0 +1,284 @@
+From 73f675bb5015298c387bd414e20183825ae37d89 Mon Sep 17 00:00:00 2001
+From: imccyu <276526105+imccyu@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 17:33:59 +0800
+Subject: [PATCH] =?UTF-8?q?=E5=A2=9E=E5=8A=A0=E4=BA=86=E8=87=AA=E5=AE=9A?=
+ =?UTF-8?q?=E4=B9=89=E6=A8=A1=E5=9E=8B=E7=9A=84=E6=97=B6=E5=80=99=E8=BF=9B?=
+ =?UTF-8?q?=E8=A1=8C=E6=A8=A1=E5=9E=8B=E6=90=9C=E5=AF=BB=E5=92=8C=E6=9B=B4?=
+ =?UTF-8?q?=E6=96=B9=E4=BE=BF=E7=9A=84=E9=80=89=E6=8B=A9?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../ui-settings-models/README.i18n.yaml       |  4 +-
+ packages/client/ui-settings-models/README.md  |  2 +-
+ .../client/ui-settings-models/README.zh.md    |  2 +-
+ .../src/client/ModelListEditor.tsx            | 42 ++++++++++++-
+ .../src/client/ModelsSection.module.css       | 21 +++++++
+ .../ui-settings-models/src/client/locales.ts  |  6 ++
+ .../tests/provider-form.client.spec.tsx       | 62 +++++++++++++++++++
+ 7 files changed, 134 insertions(+), 5 deletions(-)
+
+diff --git a/packages/client/ui-settings-models/README.i18n.yaml b/packages/client/ui-settings-models/README.i18n.yaml
+index f26ca67..0dc5f15 100644
+--- a/packages/client/ui-settings-models/README.i18n.yaml
++++ b/packages/client/ui-settings-models/README.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write packages/client/ui-settings-models/README.md
+-README.md: f0094c4f2687beaf6a5e5f7a1a8dc3d4ebdbcbc0
+-README.zh.md: 68bb64ddeebfd65644edbb5e11fd2e147214d44a
++README.md: caa4fea99658c2953199bfed59a2636e8f4e41f8
++README.zh.md: 0aeb03920e537f03be4003c4d3e813cc93320610
+diff --git a/packages/client/ui-settings-models/README.md b/packages/client/ui-settings-models/README.md
+index f0094c4..caa4fea 100644
+--- a/packages/client/ui-settings-models/README.md
++++ b/packages/client/ui-settings-models/README.md
+@@ -16,7 +16,7 @@ Every edit lands as `settings.mutate` path ops against the stored section — a
+ 
+ A pi-ai profile's `models` list is edited on the card: one row per model showing its id and display name, with the context window and output cap behind a per-row disclosure and two label-free actions — expand and delete — on the right. An empty list means "serve this route's built-in catalog", so a row is only ever added deliberately; clearing a capacity drops it rather than storing a value the schema would reject, and the adapter's route-level fallbacks size whatever configuration leaves out — an empty capacity shows those fallbacks' magnitude as its placeholder, a hint rather than a mirror, since the field counts `K` as 1000 and a deployment may override them. A capacity that is not a positive integer is simply not stored.
+ 
+-**Fetch available models** asks `llm.discoverModels` about the endpoint the form **currently shows**, including a base URL edited but not yet saved and a key typed but not yet stored, so adding a provider is one pass instead of save-then-return. The reply opens a picker rather than being written: candidates already configured start unchecked, so adopting a selection never overwrites a capacity the user corrected. A provider that cannot be interrogated is a detour, not a dead end — the adapter's own message appears beside the rows, which stay editable by hand.
++**Fetch available models** asks `llm.discoverModels` about the endpoint the form **currently shows**, including a base URL edited but not yet saved and a key typed but not yet stored, so adding a provider is one pass instead of save-then-return. The reply opens a picker rather than being written: candidates already configured start unchecked, so adopting a selection never overwrites a capacity the user corrected. The picker carries a case-insensitive search over candidate ids and a deselect-all action; both are view-local — search narrows what renders while the picks stay a set of ids, and deselect-all clears the whole selection, including candidates an active search hides. A provider that cannot be interrogated is a detour, not a dead end — the adapter's own message appears beside the rows, which stay editable by hand.
+ 
+ **Add a custom provider** declares a route pi-ai does not ship. It is its own card rather than the editor with extra fields, because the route id is being chosen here and the settings address does not exist until it is: one `settings.mutate` sets the whole profile at `providers.<route>`, and the key travels separately through `credentials.set` under the same `<ROUTE>_API_KEY` derivation an existing provider uses. What a hand-declared route cannot default gates the create button — a unique **Provider ID**, an endpoint, a protocol, and at least one uniquely-identified model — so the failure names the field while the user is still looking at it. The id must start with a lowercase letter, because it is also the stem of the derived credential reference and a reference is a POSIX shell identifier: a digit-leading id otherwise passes every check this card makes and then fails at the credential seam with a raw regular expression. Capacities do not gate it: the adapter's fallbacks size a model the endpoint described by id alone, which is what most listings return. The protocol choices are read out of the namespace's own schema rather than a wire field or a constant, so they cannot drift from the ones the adapter accepts. The card records the conventional `apiKeyEnv` reference only when a key is typed, the same rule the editor applies, so a route declared for provider-native authentication is not born pointing at a reference nothing will ever set. When the profile write lands but the key write fails, the provider already exists: the card settles the fields describing it, retries the credential alone — re-running the profile write would carry the revision that write just superseded, so the Host would answer `settings-conflict` and the key could never be stored from here — and reports the created provider even if the user then cancels.
+ 
+diff --git a/packages/client/ui-settings-models/README.zh.md b/packages/client/ui-settings-models/README.zh.md
+index 68bb64d..0aeb039 100644
+--- a/packages/client/ui-settings-models/README.zh.md
++++ b/packages/client/ui-settings-models/README.zh.md
+@@ -16,7 +16,7 @@
+ 
+ pi-ai profile 的 `models` 列表就在卡片上编辑：一行一个模型，行上显示 id 与显示名称，上下文窗口与输出上限收在该行的展开区内，右侧是两个无文字的操作——展开与删除。空列表意味着「使用该路由的内置 catalog」，因此每一行都只会被刻意添加；清空容量会丢弃它，而不是存入一个 schema 会拒绝的值，配置留空的部分由适配器的路由级回退值定尺寸——留空的容量以这些回退值的量级作为占位符，那只是提示而非镜像：该字段按 1000 计 `K`，且部署可以覆盖这些回退值。不是正整数的容量根本不会被存下。
+ 
+-**获取可用模型**会针对表单**当前显示**的端点调用 `llm.discoverModels`，包括已修改但尚未保存的 API 地址和已键入但尚未存储的密钥，因此新增一个提供方是一趟走完，而不是「先保存再回来」。回复会打开一个选择框而不是直接写入：已配置过的候选默认不勾选，因此采纳一次选择绝不会覆盖用户已更正的容量。无法被询问的提供方只是绕路而非死路——适配器自己的消息会显示在各行旁边，而这些行仍可手工编辑。
++**获取可用模型**会针对表单**当前显示**的端点调用 `llm.discoverModels`，包括已修改但尚未保存的 API 地址和已键入但尚未存储的密钥，因此新增一个提供方是一趟走完，而不是「先保存再回来」。回复会打开一个选择框而不是直接写入：已配置过的候选默认不勾选，因此采纳一次选择绝不会覆盖用户已更正的容量。选择框提供按模型 ID 的大小写不敏感搜索和「取消全选」操作；两者都只作用于视图——搜索只收窄可见列表，勾选状态仍是按 ID 记录的集合，取消全选会清空整个选择，包括被搜索隐藏的候选。无法被询问的提供方只是绕路而非死路——适配器自己的消息会显示在各行旁边，而这些行仍可手工编辑。
+ 
+ **添加自定义提供方**用来声明 pi-ai 未提供的路由。它是独立的一张卡片而非在编辑器上加字段，因为路由 id 正是在这里被*选定*的，而在选定之前 settings 地址并不存在：一次 `settings.mutate` 在 `providers.<route>` 上设置整个 profile，密钥则经 `credentials.set` 单独传递，使用与既有提供方相同的 `<ROUTE>_API_KEY` 派生。手工声明的路由无法默认的东西会门控创建按钮——唯一的 **Provider ID**、端点、协议，以及至少一个标识唯一的模型——因此失败会在用户仍看着该字段时点名它。该 id 必须以小写字母开头，因为它同时是派生凭据引用的词干，而引用是 POSIX shell 标识符：数字开头的 id 否则会通过这张卡片的每一项检查，然后在凭据 seam 上抛出原始正则表达式错误。容量不参与门控：端点只按 id 描述的模型（这正是多数列表返回的形态）由适配器的回退值定尺寸。协议选项读自该 namespace 自己的 schema，而非某个协议字段或常量，因此它们不会与适配器实际接受的集合发生漂移。只有键入了密钥，这张卡片才记录约定的 `apiKeyEnv` 引用，与编辑器同一条规则，因此一条为提供方原生认证声明的路由不会一出生就指向一个永远不会被设置的引用。当 profile 写入成功而密钥写入失败时，提供方已经存在：卡片会把描述它的字段定住，只重试凭据——再跑一次 profile 写入会带着刚被自己这次写入取代的 revision，宿主将以 `settings-conflict` 应答，密钥就再也无法从这里存下——并且即使用户随后取消，也照实报告提供方已创建。
+ 
+diff --git a/packages/client/ui-settings-models/src/client/ModelListEditor.tsx b/packages/client/ui-settings-models/src/client/ModelListEditor.tsx
+index 6d88484..162647b 100644
+--- a/packages/client/ui-settings-models/src/client/ModelListEditor.tsx
++++ b/packages/client/ui-settings-models/src/client/ModelListEditor.tsx
+@@ -12,6 +12,11 @@
+  * A provider that cannot be interrogated (an unreachable endpoint, a protocol
+  * with no readable listing) is not a dead end: the failure is shown next to the
+  * rows the user can still fill in by hand.
++ *
++ * The picker's search box and deselect-all action are view-local: search
++ * narrows which candidates render, while the picks remain a set of ids, so
++ * deselect-all clears every pick — including any hidden behind an active
++ * filter — and adoption is unaffected by what the search box shows.
+  */
+ 
+ import { useState } from 'react'
+@@ -164,6 +169,9 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+   const [failure, setFailure] = useState<string | undefined>(undefined)
+   const [candidates, setCandidates] = useState<readonly DiscoveredModelView[] | undefined>(undefined)
+   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
++  // View-local filter over the candidate ids; cleared with the dialog so the
++  // next fetch opens unfiltered.
++  const [search, setSearch] = useState('')
+   // Rows carry an id and a name; capacities are the exception, so they stay
+   // folded until asked for rather than crowding every row with four inputs.
+   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
+@@ -264,6 +272,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+   const closePicker = (): void => {
+     setCandidates(undefined)
+     setPicked(new Set())
++    setSearch('')
+   }
+ 
+   const adoptPicked = (): void => {
+@@ -290,6 +299,17 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+     })
+   }
+ 
++  // The list as a plain array once, so the filter needs no per-arm fallback:
++  // the dialog builds its body even while closed, where nothing was fetched.
++  const candidateList = candidates ?? []
++  /** The candidates the search box leaves visible, matched on the id alone. */
++  const visibleCandidates = (): readonly DiscoveredModelView[] => {
++    const query = search.trim().toLowerCase()
++    return query.length === 0
++      ? candidateList
++      : candidateList.filter(candidate => candidate.id.toLowerCase().includes(query))
++  }
++
+   // A route the adapter already describes answers without an endpoint; only a
+   // draft with neither has nothing to ask about.
+   const askable = probe.provider !== undefined || (probe.baseURL !== undefined && probe.baseURL.length > 0)
+@@ -445,8 +465,25 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+           </>
+         )}
+       >
++        <div className={styles['fetchTools']}>
++          <input
++            className={`${styles['input']} ${styles['fetchSearch']}`}
++            type="text"
++            value={search}
++            placeholder={t('fetchSearch')}
++            aria-label={t('fetchSearch')}
++            onChange={(event) => { setSearch(event.target.value) }}
++          />
++          <button
++            type="button"
++            className={styles['linkButton']}
++            onClick={() => { setPicked(new Set()) }}
++          >
++            {t('fetchDeselectAll')}
++          </button>
++        </div>
+         <ul className={styles['candidateList']}>
+-          {(candidates ?? []).map(candidate => (
++          {visibleCandidates().map(candidate => (
+             <li key={candidate.id} className={styles['candidate']}>
+               <label className={styles['candidateLabel']}>
+                 <input
+@@ -462,6 +499,9 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+             </li>
+           ))}
+         </ul>
++        {candidates !== undefined && visibleCandidates().length === 0
++          ? <p className={styles['candidateEmpty']}>{t('fetchNoMatch')}</p>
++          : null}
+       </Modal>
+     </section>
+   )
+diff --git a/packages/client/ui-settings-models/src/client/ModelsSection.module.css b/packages/client/ui-settings-models/src/client/ModelsSection.module.css
+index 407f224..3111d59 100644
+--- a/packages/client/ui-settings-models/src/client/ModelsSection.module.css
++++ b/packages/client/ui-settings-models/src/client/ModelsSection.module.css
+@@ -777,6 +777,20 @@ select.input {
+   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+ }
+ 
++/* Search box and deselect-all above the candidate list. The input reuses the
++   shared `.input` face; only the layout is local to the dialog. */
++.fetchTools {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  margin-bottom: 8px;
++}
++
++.fetchSearch {
++  flex: 1 1 auto;
++  min-width: 0;
++}
++
+ .candidateList {
+   display: flex;
+   flex-direction: column;
+@@ -806,3 +820,10 @@ select.input {
+   font-size: 13px;
+   overflow-wrap: anywhere;
+ }
++
++.candidateEmpty {
++  margin: 8px 0 0;
++  color: var(--dsw-alias-label-tertiary);
++  font-size: 12px;
++  line-height: 18px;
++}
+diff --git a/packages/client/ui-settings-models/src/client/locales.ts b/packages/client/ui-settings-models/src/client/locales.ts
+index e2224c9..6ac5215 100644
+--- a/packages/client/ui-settings-models/src/client/locales.ts
++++ b/packages/client/ui-settings-models/src/client/locales.ts
+@@ -80,6 +80,9 @@ export const en = {
+   fetchTitle: 'Choose models to add',
+   fetchDescription: 'These are the models this provider has available. Choose the ones to add.',
+   fetchAdopt: 'Add selected',
++  fetchSearch: 'Search model ID',
++  fetchDeselectAll: 'Deselect all',
++  fetchNoMatch: 'No models match the search.',
+   customAdd: 'Add a custom provider',
+   customTitle: 'Custom provider',
+   customTag: 'Custom',
+@@ -197,6 +200,9 @@ export const zh: { [Key in keyof typeof en]: string } = {
+   fetchTitle: '选择要添加的模型',
+   fetchDescription: '以下是模型提供方的可用模型，勾选要添加的模型。',
+   fetchAdopt: '添加所选',
++  fetchSearch: '搜索模型 ID',
++  fetchDeselectAll: '取消全选',
++  fetchNoMatch: '没有符合条件的模型。',
+   customAdd: '添加自定义提供方',
+   customTitle: '自定义提供方',
+   customTag: '自定义',
+diff --git a/packages/client/ui-settings-models/tests/provider-form.client.spec.tsx b/packages/client/ui-settings-models/tests/provider-form.client.spec.tsx
+index 2724853..b7095a7 100644
+--- a/packages/client/ui-settings-models/tests/provider-form.client.spec.tsx
++++ b/packages/client/ui-settings-models/tests/provider-form.client.spec.tsx
+@@ -607,6 +607,68 @@ describe('endpoint interrogation', () => {
+     // A disclosed output cap rides along with the candidate that has one.
+     expect(firstMutate(mutate).ops[0]?.value).toEqual([{ id: 'a' }, { id: 'b', maxTokens: 2048 }])
+   })
++
++  it('narrows the picker by search without disturbing the picks', async () => {
++    const discover = vi.fn(() => Promise.resolve(ok({
++      models: [{ id: 'alpha-large' }, { id: 'alpha-mini' }, { id: 'beta-base' }],
++    })))
++    const { mutate } = await mountSection({ discover })
++    openEditor('openai')
++
++    fireEvent.click(screen.getByText(en.fetchModels))
++    await screen.findByText(en.fetchTitle)
++
++    const searchBox = screen.getByLabelText<HTMLInputElement>(en.fetchSearch)
++    fireEvent.change(searchBox, { target: { value: 'ALPHA' } })
++    // Matching is a case-insensitive substring of the id.
++    expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(2)
++
++    fireEvent.change(searchBox, { target: { value: 'no-such-model' } })
++    expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(0)
++    expect(screen.getByText(en.fetchNoMatch)).toBeTruthy()
++
++    // Clearing the search restores the full list, still checked as it was.
++    fireEvent.change(searchBox, { target: { value: '' } })
++    const boxes = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
++    expect(boxes).toHaveLength(3)
++    expect(boxes.every(box => box.checked)).toBe(true)
++    fireEvent.click(screen.getByText(en.fetchAdopt))
++
++    fireEvent.click(screen.getByText(en.apply))
++    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
++    expect(firstMutate(mutate).ops[0]?.value).toEqual([
++      { id: 'alpha-large' }, { id: 'alpha-mini' }, { id: 'beta-base' },
++    ])
++  })
++
++  it('deselects every candidate, including ones an active search hides', async () => {
++    const discover = vi.fn(() => Promise.resolve(ok({
++      models: [{ id: 'kept', contextWindow: 999 }, { id: 'new-a' }, { id: 'new-b' }],
++    })))
++    const { mutate } = await mountSection({
++      discover,
++      providers: { openai: { baseURL: 'https://proxy.example/v1', models: [{ id: 'kept', contextWindow: 111 }] } },
++    })
++    openEditor('openai')
++
++    fireEvent.click(screen.getByText(en.fetchModels))
++    await screen.findByText(en.fetchTitle)
++
++    // Only 'new-a' is visible, but the button names the whole selection.
++    fireEvent.change(screen.getByLabelText(en.fetchSearch), { target: { value: 'new-a' } })
++    fireEvent.click(screen.getByText(en.fetchDeselectAll))
++    fireEvent.change(screen.getByLabelText(en.fetchSearch), { target: { value: '' } })
++    const boxes = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
++    expect(boxes.map(box => box.checked)).toEqual([false, false, false])
++
++    // Adopting after the clear adds nothing: the tuned row survives alone, and
++    // the draft then matches the stored one, so Apply has no write to make.
++    fireEvent.click(screen.getByText(en.fetchAdopt))
++    expect(screen.queryByText(en.fetchTitle)).toBeNull()
++    expect(screen.getAllByLabelText(new RegExp(en.modelId)).map(input => (input as HTMLInputElement).value))
++      .toEqual(['kept'])
++    expect(mutate).not.toHaveBeenCalled()
++  })
+ })
+ 
+ describe('provider rows', () => {
+-- 
+2.53.0
+

@@ -1,0 +1,17 @@
+# dsh-models-plus - replaces the shipped Models settings page with this fork.
+#
+# The upstream row is disabled rather than redirected: a patch can override
+# `config`, `disabled`, and the other entry fields, but never a row's `name`
+# (vendor/include/src/index.ts skips `name` in its override loop and uses it only
+# as a mismatch guard), so pointing the shipped id at another package is not
+# expressible. Disable one row, insert another.
+#
+# Row id `models-plus` is this package's own; the upstream `ui-settings-models`
+# row stays in the tree, disabled, so removing this bundle restores it.
+
+- id: ui-settings-models
+  disabled: true
+
+- insert:
+    - id: models-plus
+      name: dsh-models-plus

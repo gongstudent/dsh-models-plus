@@ -1,0 +1,42 @@
+{
+  "name": "dsh-models-plus",
+  "version": "1.0.0",
+  "description": "Drop-in replacement for the DeepSeek Harness Models settings page: model-discovery search, bulk deselect, and a local-route switch that does not remount on every settings revision.",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./invariant": "./lib/invariant.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "platform": "web"
+    }
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "prepare-src": "node scripts/prepare-src.mjs",
+    "build": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "devDependencies": {
+    "lightningcss": "^1.33.0",
+    "tsdown": "^0.23.0"
+  }
+}

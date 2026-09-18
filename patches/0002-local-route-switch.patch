@@ -1,0 +1,146 @@
+From 0e635bf7f5661969ebf7393b6505096ce7d9ca4c Mon Sep 17 00:00:00 2001
+From: gonglianghui <1651394818@qq.com>
+Date: Fri, 21 Aug 2026 13:56:42 +0800
+Subject: [PATCH] =?UTF-8?q?=E4=BC=98=E5=8C=96=E4=BA=86=E5=89=8D=E7=AB=AFui?=
+ =?UTF-8?q?=E7=9A=84=E5=8D=A1=E9=A1=BF=E9=97=AE=E9=A2=98?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../src/client/ModelsSection.module.css       |  5 +--
+ .../src/client/ModelsSection.tsx              | 31 ++++++++++++++-----
+ 2 files changed, 26 insertions(+), 10 deletions(-)
+
+diff --git a/packages/client/ui-settings-models/src/client/ModelsSection.module.css b/packages/client/ui-settings-models/src/client/ModelsSection.module.css
+index b655317..407f224 100644
+--- a/packages/client/ui-settings-models/src/client/ModelsSection.module.css
++++ b/packages/client/ui-settings-models/src/client/ModelsSection.module.css
+@@ -89,6 +89,7 @@
+   border: 0;
+   background: transparent;
+   cursor: pointer;
++  transition: opacity 160ms var(--ds-ease-in-out);
+ }
+ 
+ .routeSwitch:disabled {
+@@ -108,7 +109,7 @@
+   height: 18px;
+   border-radius: 9px;
+   background: var(--dsw-alias-border-l2);
+-  transition: background-color 120ms var(--ds-ease-in-out);
++  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+ }
+ 
+ .routeSwitchThumb {
+@@ -119,7 +120,7 @@
+   height: 12px;
+   border-radius: 50%;
+   background: var(--dsw-alias-bg-layer-1);
+-  transition: transform 120ms var(--ds-ease-in-out);
++  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+ }
+ 
+ .routeSwitchTrack[data-on='true'] {
+diff --git a/packages/client/ui-settings-models/src/client/ModelsSection.tsx b/packages/client/ui-settings-models/src/client/ModelsSection.tsx
+index fcc7bef..c859877 100644
+--- a/packages/client/ui-settings-models/src/client/ModelsSection.tsx
++++ b/packages/client/ui-settings-models/src/client/ModelsSection.tsx
+@@ -184,8 +184,21 @@ function localRouteValue(namespace: SettingsNamespaceView): { enabled: boolean;
+ function LocalRouteControl({ namespace, controller, api, t, readOnly }: LocalRouteControlProps): ReactNode {
+   const value = localRouteValue(namespace)
+   const [portDraft, setPortDraft] = useState(String(value.port))
++  const [lastSyncedPort, setLastSyncedPort] = useState(value.port)
++  const [optimisticEnabled, setOptimisticEnabled] = useState<boolean | null>(null)
+   const [pending, setPending] = useState(false)
+   const [failure, setFailure] = useState<string | undefined>(undefined)
++
++  if (value.port !== lastSyncedPort) {
++    setLastSyncedPort(value.port)
++    setPortDraft(String(value.port))
++  }
++
++  if (optimisticEnabled !== null && value.enabled === optimisticEnabled && !pending) {
++    setOptimisticEnabled(null)
++  }
++
++  const isEnabled = optimisticEnabled ?? value.enabled
+   const parsedPort = /^\d+$/.test(portDraft) ? Number(portDraft) : Number.NaN
+   const portValid = Number.isInteger(parsedPort) && parsedPort >= 1024 && parsedPort <= 65_535
+ 
+@@ -193,17 +206,20 @@ function LocalRouteControl({ namespace, controller, api, t, readOnly }: LocalRou
+     if (pending || readOnly) return
+     setPending(true)
+     setFailure(undefined)
++    setOptimisticEnabled(enabled)
+     void api.settings.mutate({
+       ns: namespace.ns,
+       ops: [{ op: 'set', path: ['localRoute'], value: { enabled, port } }],
+       expectedRevision: namespace.revision,
+     }).then(async (response) => {
+       if (!response.result.ok) {
++        setOptimisticEnabled(null)
+         setFailure(response.result.error.message)
+         return
+       }
+       await controller.load()
+     }).catch((error: unknown) => {
++      setOptimisticEnabled(null)
+       setFailure(messageOf(error))
+     }).finally(() => { setPending(false) })
+   }
+@@ -213,7 +229,7 @@ function LocalRouteControl({ namespace, controller, api, t, readOnly }: LocalRou
+       setFailure(t('localRoutePortInvalid'))
+       return
+     }
+-    if (parsedPort !== value.port) write(value.enabled, parsedPort)
++    if (parsedPort !== value.port) write(isEnabled, parsedPort)
+   }
+ 
+   return (
+@@ -229,19 +245,19 @@ function LocalRouteControl({ namespace, controller, api, t, readOnly }: LocalRou
+           type="button"
+           className={styles['routeSwitch']}
+           role="switch"
+-          aria-checked={value.enabled}
++          aria-checked={isEnabled}
+           aria-label={t('localRouteEnabled')}
+-          title={value.enabled ? t('localRouteStop') : t('localRouteStart')}
++          title={isEnabled ? t('localRouteStop') : t('localRouteStart')}
+           disabled={pending || readOnly}
+           onClick={() => {
+             if (!portValid) {
+               setFailure(t('localRoutePortInvalid'))
+               return
+             }
+-            write(!value.enabled, parsedPort)
++            write(!isEnabled, parsedPort)
+           }}
+         >
+-          <span className={styles['routeSwitchTrack']} data-on={value.enabled || undefined} aria-hidden="true">
++          <span className={styles['routeSwitchTrack']} data-on={isEnabled || undefined} aria-hidden="true">
+             <span className={styles['routeSwitchThumb']} />
+           </span>
+         </button>
+@@ -267,8 +283,8 @@ function LocalRouteControl({ namespace, controller, api, t, readOnly }: LocalRou
+           }}
+         />
+       </label>
+-      <p className={value.enabled ? styles['routeRunning'] : styles['routeStopped']}>
+-        {pending ? t('localRouteApplying') : value.enabled ? t('localRouteRunning') : t('localRouteStopped')}
++      <p className={isEnabled ? styles['routeRunning'] : styles['routeStopped']}>
++        {pending ? t('localRouteApplying') : isEnabled ? t('localRouteRunning') : t('localRouteStopped')}
+       </p>
+       {failure === undefined ? null : <p className={styles['error']}>{failure}</p>}
+     </section>
+@@ -400,7 +416,6 @@ function Loaded({ injected }: { injected: ModelsSectionInjected }): ReactNode {
+         ? null
+         : (
+           <LocalRouteControl
+-            key={piAiNamespace.revision}
+             namespace={piAiNamespace}
+             controller={controller}
+             api={api}
+-- 
+2.53.0
+

@@ -1,0 +1,4 @@
+node_modules/
+
+# lib/ is deliberately NOT ignored: an out-of-tree client plugin is served from
+# these built artifacts, so they must be committed for a GitHub install to work.
