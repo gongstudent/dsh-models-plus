@@ -4,7 +4,11 @@
  * @module dsh-llm-pi-ai/context
  */
 
-import { CallId, contentHasImage, LlmError } from '@deepseek-ai/dsh-llm'
+import * as dshLlm from '@deepseek-ai/dsh-llm'
+import { contentHasImage, LlmError } from '@deepseek-ai/dsh-llm'
+
+type CallId = string
+const CallId = (id: string): any => ((dshLlm as any).CallId ?? (dshLlm as any).ToolCallId ?? ((x: string) => x))(id)
 import type { ContentBlock, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { Context as PiContext, ImageContent, Message as PiMessage, TextContent, Tool as PiTool } from '@earendil-works/pi-ai'
