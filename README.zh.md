@@ -47,14 +47,18 @@ npm install -g @deepseek-ai/dsh@0.1.1-rc.2
 在终端执行：
 
 ```sh
-dsh plugin --profile web add github:gongstudent/dsh-models-plus
+# 如果全局安装了 dsh：
+dsh plugin --profile web add -w github:gongstudent/dsh-models-plus
+
+# 如果是通过 npx 启动的用户：
+npx @deepseek-ai/dsh plugin --profile web add -w github:gongstudent/dsh-models-plus
 ```
 
 也可以使用完整 git 仓库地址或指定版本 tag：
 
 ```sh
-dsh plugin --profile web add https://github.com/gongstudent/dsh-models-plus.git
-dsh plugin --profile web add github:gongstudent/dsh-models-plus#v1.0.0
+dsh plugin --profile web add -w https://github.com/gongstudent/dsh-models-plus.git
+dsh plugin --profile web add -w github:gongstudent/dsh-models-plus#v1.0.0
 ```
 
 > **首次安装放行提示（如遇拦截）**：pnpm 对带有安装脚本的依赖（如 `@google/genai`, `protobufjs`）有安全审查策略。如果安装时提示：

@@ -47,14 +47,18 @@ npm install -g @deepseek-ai/dsh@0.1.1-rc.2
 In your terminal, run:
 
 ```sh
-dsh plugin --profile web add github:gongstudent/dsh-models-plus
+# If dsh is installed globally:
+dsh plugin --profile web add -w github:gongstudent/dsh-models-plus
+
+# For users running via npx:
+npx @deepseek-ai/dsh plugin --profile web add -w github:gongstudent/dsh-models-plus
 ```
 
 Or via HTTPS / pinned tag:
 
 ```sh
-dsh plugin --profile web add https://github.com/gongstudent/dsh-models-plus.git
-dsh plugin --profile web add github:gongstudent/dsh-models-plus#v1.0.0
+dsh plugin --profile web add -w https://github.com/gongstudent/dsh-models-plus.git
+dsh plugin --profile web add -w github:gongstudent/dsh-models-plus#v1.0.0
 ```
 
 > **Note for first-time install**: pnpm enforces a supply-chain check on packages with install scripts (`@google/genai`, `protobufjs`). If pnpm prompts:
