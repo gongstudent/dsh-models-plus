@@ -55,7 +55,196 @@ export function refreshIfLoaded(controller: ModelsSettingsStore): void {
  * ui-settings' apply, whose activation order relative to this one is NOT
  * constrained; registration depends on each slot through `slots.inject()`.
  */
-export const inject = ['slots', 'locale', 'connection', 'remote']
+export const inject = [
+  'slots',
+  'locale',
+  'remote',
+  'remote.credentials',
+  'remote.llm',
+  'remote.settings',
+]
+
+/**
+ * Compatibility bridge providing an IApiClient-compatible surface
+ * backed by modern DSH's ctx.remote.
+ */
+function createApiAdapter(ctx: ClientContext): Pick<IApiClient, 'settings' | 'credentials' | 'llm'> {
+  const connection = ctx.get('connection') as ConnectionHandle | undefined
+  const connApi = connection?.api as any
+  const remote = (ctx as any).remote
+
+  return {
+    settings: {
+      describe: async (req?: any) => {
+        if (remote?.settings?.describe) {
+          const res = await remote.settings.describe()
+          return {
+            ok: res.ok,
+            result: res.ok ? { ok: true, value: res.value } : { ok: false, error: res.error },
+            value: res.value,
+          }
+        }
+        if (connApi?.settings?.describe) {
+          return connApi.settings.describe(req ?? {})
+        }
+        throw new Error('settings service is not available')
+      },
+      mutate: async (args: any, ...rest: any[]) => {
+        let ns: string
+        let ops: any[]
+        let expectedRevision: number | undefined
+        if (typeof args === 'string') {
+          ns = args
+          ops = rest[0]
+          expectedRevision = rest[1]
+        } else {
+          ns = args.ns
+          ops = args.ops
+          expectedRevision = args.expectedRevision
+        }
+
+        if (remote?.settings?.mutate) {
+          const res = await remote.settings.mutate(ns, ops, expectedRevision)
+          let error = res.error
+          if (!res.ok && res.error) {
+            const code = (res.error.code === 'settings/conflict' || res.error.code === 'settings-conflict')
+              ? 'settings-conflict'
+              : res.error.code
+            error = { ...res.error, code }
+          }
+          return {
+            ok: res.ok,
+            result: res.ok ? { ok: true, value: res.value } : { ok: false, error },
+          }
+        }
+        if (connApi?.settings?.mutate) {
+          return connApi.settings.mutate({ ns, ops, expectedRevision })
+        }
+        throw new Error('settings service is not available')
+      },
+    },
+    credentials: {
+      describe: async (args: { refs: string[] } | string[]) => {
+        const refs = Array.isArray(args) ? args : args.refs
+        if (remote?.credentials?.describe) {
+          const res = await remote.credentials.describe(refs)
+          return {
+            ok: res.ok,
+            result: res.ok ? {
+              ok: true,
+              value: {
+                credentials: res.value,
+                ...res.value,
+              },
+            } : {
+              ok: false,
+              error: res.error,
+            },
+            value: {
+              credentials: res.value,
+              ...res.value,
+            },
+          }
+        }
+        if (connApi?.credentials?.describe) {
+          return connApi.credentials.describe({ refs })
+        }
+        throw new Error('credentials service is not available')
+      },
+      set: async (args: { ref: string; value: string } | string, val?: string) => {
+        const ref = typeof args === 'string' ? args : args.ref
+        const value = typeof args === 'string' ? val! : args.value
+        if (remote?.credentials?.set) {
+          const res = await remote.credentials.set(ref, value)
+          return {
+            ok: res.ok,
+            result: res,
+          }
+        }
+        if (connApi?.credentials?.set) {
+          return connApi.credentials.set({ ref, value })
+        }
+        throw new Error('credentials service is not available')
+      },
+      unset: async (args: { ref: string } | string) => {
+        const ref = typeof args === 'string' ? args : args.ref
+        if (remote?.credentials?.unset) {
+          const res = await remote.credentials.unset(ref)
+          return {
+            ok: res.ok,
+            result: res,
+          }
+        }
+        if (connApi?.credentials?.unset) {
+          return connApi.credentials.unset({ ref })
+        }
+        throw new Error('credentials service is not available')
+      },
+    },
+    llm: {
+      providers: async (req?: any) => {
+        if (remote?.llm?.listConfigurableProviders) {
+          const res = await remote.llm.listConfigurableProviders()
+          return {
+            ok: res.ok,
+            result: res.ok ? {
+              ok: true,
+              value: {
+                providers: res.value,
+              },
+            } : {
+              ok: false,
+              error: res.error,
+            },
+            value: {
+              providers: res.value,
+            },
+          }
+        }
+        if (connApi?.llm?.providers) {
+          return connApi.llm.providers(req ?? {})
+        }
+        throw new Error('llm service is not available')
+      },
+      discoverModels: async (args: any, maybeRequest?: any) => {
+        let settingsNs: string
+        let request: any
+        if (typeof args === 'string') {
+          settingsNs = args
+          request = maybeRequest
+        } else {
+          settingsNs = args.settingsNs
+          const { settingsNs: _, ...rest } = args
+          request = rest
+        }
+        if (remote?.llm?.discoverModels) {
+          const res = await remote.llm.discoverModels(settingsNs, request)
+          return {
+            ok: res.ok,
+            result: res.ok ? {
+              ok: true,
+              value: {
+                models: res.value,
+                ...(Array.isArray(res.value) ? {} : res.value),
+              },
+            } : {
+              ok: false,
+              error: res.error,
+            },
+            value: {
+              models: res.value,
+              ...(Array.isArray(res.value) ? {} : res.value),
+            },
+          }
+        }
+        if (connApi?.llm?.discoverModels) {
+          return connApi.llm.discoverModels(args, maybeRequest)
+        }
+        throw new Error('llm service is not available')
+      },
+    },
+  } as Pick<IApiClient, 'settings' | 'credentials' | 'llm'>
+}
 
 /**
  * Register the Models section once the `settings.section` declaration is on
@@ -66,26 +255,27 @@ export const inject = ['slots', 'locale', 'connection', 'remote']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-models: copy dictionaries')
 
-  const connection = ctx.get('connection') as ConnectionHandle
-  const controller = new ModelsSettingsStore(connection.api)
+  const connection = ctx.get('connection') as ConnectionHandle | undefined
+  const api = createApiAdapter(ctx)
+  const controller = new ModelsSettingsStore(api)
   // Registration-time text (the nav label thunk) and the inject faces share
   // one bound translate; copy freshness rides the locale revision.
   const t = ctx.locale.bind(NS) as ModelsSectionInjected['t']
   const injected = (): ModelsSectionInjected => ({
     controller,
     hooks: { snapshot: controller.store },
-    api: connection.api,
+    api,
     t,
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
     controller,
     hooks: { models: controller.store },
-    api: connection.api,
+    api,
     t,
   })
   const welcomeController = new WelcomeNoticeStore(
-    connection.api,
-    connection.isLoopback ? 'host' : 'memory',
+    api,
+    connection?.isLoopback ?? true ? 'host' : 'memory',
   )
   const welcomeInjected = (): WelcomeNoticeInjected => ({
     controller: welcomeController,
@@ -101,16 +291,20 @@ export function apply(ctx: ClientContext): void {
       refreshModels()
       refreshWelcomeIfLoaded(welcomeController)
     }
-    const disposers = [
-      ctx.remote.$on('settings/document-updated', (ns) => {
+    const disposers: Array<(() => void) | undefined> = [
+      ctx.remote?.$on?.('settings/document-updated', (ns: string) => {
         refreshModels()
         if (ns === WELCOME_NOTICE_SETTINGS_NAMESPACE) refreshWelcomeIfLoaded(welcomeController)
       }),
-      ctx.remote.$on('credentials/updated', refreshModels),
-      ctx.remote.$on('llm/adapters-updated', refreshModels),
+      ctx.remote?.$on?.('credentials/reference-updated' as any, refreshModels),
+      ctx.remote?.$on?.('llm/adapters-updated' as any, refreshModels),
       ctx.on('connection/reset', refreshAll),
     ]
-    return () => { for (const dispose of disposers) dispose() }
+    return () => {
+      for (const dispose of disposers) {
+        if (typeof dispose === 'function') dispose()
+      }
+    }
   }, 'ui-settings-models: pushed invalidations')
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({
