@@ -9,7 +9,7 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import type { IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelsSettingsState, ModelsSettingsStore } from './store.ts'
 import { onboardingReadiness } from './store.ts'
