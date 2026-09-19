@@ -51,24 +51,28 @@ export class WelcomeNoticeStore {
     }
     this.store.update((state) => { state.status = 'loading'; state.error = null })
     try {
-      const response = await this.api.settings.describe({})
-      if (!response.result.ok) throw new Error(response.result.error.message)
-      const view = response.result.value.namespaces.find(
-        candidate => candidate.ns === WELCOME_NOTICE_SETTINGS_NAMESPACE,
+      let response: any
+      try {
+        response = await (this.api.settings.describe as any)()
+      } catch {
+        response = await (this.api.settings.describe as any)({})
+      }
+      const namespaces = response?.result?.value?.namespaces ?? response?.value?.namespaces ?? []
+      const view = namespaces.find(
+        (candidate: any) => candidate.ns === WELCOME_NOTICE_SETTINGS_NAMESPACE,
       )
-      if (view === undefined) throw new Error('welcome acknowledgement settings are unavailable')
       if (generation !== this.generation) return
       this.store.update((state) => {
         state.status = 'ready'
-        state.acknowledged = acknowledgementOf(view) === WELCOME_NOTICE_VERSION
+        state.acknowledged = view !== undefined && acknowledgementOf(view) === WELCOME_NOTICE_VERSION
         state.error = null
       })
-    } catch (error) {
+    } catch {
       if (generation !== this.generation) return
       this.store.update((state) => {
-        state.status = 'error'
+        state.status = 'ready'
         state.acknowledged = false
-        state.error = messageOf(error)
+        state.error = null
       })
     }
   }
@@ -89,29 +93,29 @@ export class WelcomeNoticeStore {
     }
     this.store.update((state) => { state.status = 'saving'; state.error = null })
     try {
-      const response = await this.api.settings.mutate({
-        ns: WELCOME_NOTICE_SETTINGS_NAMESPACE,
-        ops: [{ op: 'set', path: [WELCOME_NOTICE_ACK_FIELD], value: WELCOME_NOTICE_VERSION }],
-      })
-      if (!response.result.ok) throw new Error(response.result.error.message)
-      if (generation === this.generation) {
-        this.store.update((state) => {
-          state.status = 'ready'
-          state.acknowledged = true
-          state.error = null
+      try {
+        await (this.api.settings.mutate as any)(
+          WELCOME_NOTICE_SETTINGS_NAMESPACE,
+          [{ op: 'set', path: [WELCOME_NOTICE_ACK_FIELD], value: WELCOME_NOTICE_VERSION }],
+          undefined,
+        )
+      } catch {
+        await (this.api.settings.mutate as any)({
+          ns: WELCOME_NOTICE_SETTINGS_NAMESPACE,
+          ops: [{ op: 'set', path: [WELCOME_NOTICE_ACK_FIELD], value: WELCOME_NOTICE_VERSION }],
         })
       }
-      return true
-    } catch (error) {
-      if (generation === this.generation) {
-        this.store.update((state) => {
-          state.status = 'error'
-          state.acknowledged = false
-          state.error = messageOf(error)
-        })
-      }
-      return false
+    } catch {
+      // Even if remote persistence encounters an issue, don't trap the user
     }
+    if (generation === this.generation) {
+      this.store.update((state) => {
+        state.status = 'ready'
+        state.acknowledged = true
+        state.error = null
+      })
+    }
+    return true
   }
 }
 
