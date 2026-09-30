@@ -10,6 +10,16 @@ export const en = {
   localRouteStopped: 'Stopped',
   localRouteApplying: 'Applying…',
   localRoutePortInvalid: 'Enter a port from 1024 to 65535.',
+  customParamsHeading: 'Header & Body Overrides (Advanced)',
+  headers: 'Header overrides',
+  headersPlaceholder: 'JSON object, e.g. {"X-Custom":"value"}',
+  headersInvalid: 'Must be a valid JSON object.',
+  bodyOverrides: 'Body overrides',
+  bodyOverridesPlaceholder: 'JSON object merged into upstream request body',
+  bodyOverridesInvalid: 'Must be a valid JSON object.',
+  saveParams: 'Save Overrides',
+  saving: 'Saving…',
+  saved: 'Saved successfully',
 } as const
 
 export const zh = {
@@ -24,6 +34,16 @@ export const zh = {
   localRouteStopped: '已停止',
   localRouteApplying: '应用中…',
   localRoutePortInvalid: '请输入 1024 到 65535 之间的有效端口。',
+  customParamsHeading: '自定义请求头与请求体 (高级定制)',
+  headers: 'Header 覆盖 (请求头)',
+  headersPlaceholder: 'JSON 对象，例如 {"X-Custom-Header":"value"}',
+  headersInvalid: '必须是合法的 JSON 对象',
+  bodyOverrides: 'Body 覆盖 (请求体)',
+  bodyOverridesPlaceholder: '合并到上游请求体的 JSON 对象，例如 {"temperature":0.7}',
+  bodyOverridesInvalid: '必须是合法的 JSON 对象',
+  saveParams: '保存覆盖设置',
+  saving: '保存中…',
+  saved: '保存成功',
 } as const
 
 export type ModelsKey = keyof typeof en

@@ -2,9 +2,10 @@
 
 [English](README.md) | 中文
 
-DeepSeek Harness 的本地路由代理插件包（Loopback Local Route Extension），通过官方标准的 `settings.models.footer` 扩展插槽深度集成：
+DeepSeek Harness 的本地路由代理与模型高级扩展插件包（Loopback Local Route & Provider Extras）：
 1. **本地路由代理（Loopback Local Route）**：提供端口可配置的本地代理服务（默认 `8317`），将 OpenAI 与 Anthropic 协议双向桥接到配置的模型服务，供 Cline、Claude Dev、Cursor、LibreChat 等外部客户端直接调用。
-2. **纯外挂式设置界面（Zero-Conflict UI Extension）**：基于官方扩展插槽机制，无缝嵌入「设置」->「模型」页面底部，完整保留官方原生界面（包括最新版本内置的模型搜索过滤、一键全选/取消、DeepSeek 官方账号登录等），**彻底避免版本更新冲突与白屏问题**。
+2. **请求头与请求体覆盖（Headers & Body Overrides）**：通过官方标准的 `settings.models.provider-card` 插槽，在各 Provider 卡片内无缝嵌入请求头与请求体 JSON 自定义配置，满足特殊中转网关、代理鉴权或参数微调需求。
+3. **零冲突纯外挂架构**：完整保留官方原生界面（原生模型选择、最新版本内置的模型搜索过滤、一键全选/取消、DeepSeek 官方账号登录等），**彻底避免版本更新冲突与白屏问题**。
 
 ---
 
@@ -15,9 +16,14 @@ DeepSeek Harness 的本地路由代理插件包（Loopback Local Route Extension
 - **健康检查与路由发现**：通过 `GET /health` 查看当前就绪的路由列表与工作状态。
 - **端口自由配置**：支持在模型设置页底部的「本地路由」卡片中实时修改端口（`1024`~`65535`，默认 `8317`），后台自动热重载生效，无需重启服务。
 
-### 2. 长期稳定的插槽扩展架构
-- **零侵入**：不覆盖、不替换任何官方核心包（如 `ui-settings-models` 或 `llm-pi-ai`），官方最新功能与安全更新随时平滑继承。
-- **全平台全版本兼容**：无缝适配 DeepSeek Harness Web 版与 Desktop 桌面版（包括 0.1.x, 0.2.x 及后续最新版本）。
+### 2. 自定义请求头与请求体（Headers & Body Overrides）
+- **按渠道个性化定制**：在「设置」->「模型」的每个 Provider 卡片中，展开「自定义请求头与请求体 (高级定制)」面板。
+- **Header 覆盖**：输入 JSON 对象（如 `{"X-Custom-Header": "value"}`），在上游调用时自动注入请求头。
+- **Body 覆盖**：输入 JSON 对象（如 `{"temperature": 0.7}`），合并到上游请求体中。
+
+### 3. 模型列表与选择体验
+- **原生保留**：所有 Provider 的模型添加、自定义模型、模型列表维护完全交由 DSH 原生处理。
+- **搜索与批量选择**：在「发现模型」弹窗中，直接使用 DSH 0.2.x 原生内置的模型 ID / 名称搜索过滤框，以及一键全选/全部取消勾选按钮。
 
 ---
 
@@ -47,7 +53,7 @@ npx @deepseek-ai/dsh plugin --profile web add -w github:gongstudent/dsh-models-p
 dsh web
 ```
 
-打开「设置」->「模型」，即可在页面底部看到「本地路由代理」控制卡片！
+打开「设置」->「模型」，即可在页面底部看到「本地路由代理」控制卡片，展开各 Provider 即可配置自定义 Headers 与 Body Overrides！
 
 ---
 
