@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/gongstudent/dsh-models-plus)
+
 DeepSeek Harness 的本地路由代理与模型高级扩展插件包（Loopback Local Route & Provider Extras）：
 1. **本地路由代理（Loopback Local Route）**：提供端口可配置的本地代理服务（默认 `8317`），将 OpenAI 与 Anthropic 协议双向桥接到配置的模型服务，供 Cline、Claude Dev、Cursor、LibreChat 等外部客户端直接调用。
 2. **请求头与请求体覆盖（Headers & Body Overrides）**：通过官方标准的 `settings.models.provider-card` 插槽，在各 Provider 卡片内无缝嵌入请求头与请求体 JSON 自定义配置，满足特殊中转网关、代理鉴权或参数微调需求。
@@ -71,6 +73,16 @@ curl http://127.0.0.1:<端口>/health
 ```json
 {"status":"ok","host":"127.0.0.1","routes":["deepseek","openai","anthropic"],"endpoints":["/v1/chat/completions","/v1/responses","/v1/messages"]}
 ```
+
+---
+
+## 权限与风险
+
+- **仅监听回环**：代理只绑定 `127.0.0.1`，其他机器无法访问。
+- **上游与密钥**：请求只发往你配置的渠道，使用 Harness 为该路由解析出的凭据（上游收到 `Authorization: Bearer …` 或 `x-api-key`）。本插件不存储任何密钥，也不访问其他服务。
+- **无遥测**：除转发你自己的请求、在回环地址应答 `GET /health` 外，不发起任何其他网络请求。
+- **仅占用一个本地端口**：启用后打开一个 TCP 端口（默认 `8317`，范围 `1024`–`65535`），不改动系统其他设置。
+- **兼容性**：支持 DeepSeek Harness 的 Web 与 Desktop profile（v0.1.x / v0.2.x 及以后），通过官方 `settings.models.footer` 插槽注册，不替换任何官方包。
 
 ---
 

@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/gongstudent/dsh-models-plus)
+
 DeepSeek Harness loopback local route extension plugin, integrated via the official `settings.models.footer` extension slot:
 1. **Loopback Local Route Proxy**: Provides a configurable local proxy service (default `8317`), bridging OpenAI and Anthropic protocols to models configured in Harness, allowing external clients like Cline, Claude Dev, Cursor, and LibreChat to connect seamlessly.
 2. **Zero-Conflict UI Extension**: Seamlessly attaches to the bottom of Settings -> Models using DSH's official slot extension contract, preserving all official features (built-in model search, bulk select/deselect, DeepSeek Account login, etc.), **completely eliminating version update breakages and blank screen issues**.
@@ -58,6 +60,16 @@ Response example:
 ```json
 {"status":"ok","host":"127.0.0.1","routes":["deepseek","openai","anthropic"],"endpoints":["/v1/chat/completions","/v1/responses","/v1/messages"]}
 ```
+
+---
+
+## Permissions & risk
+
+- **Loopback only**: the proxy binds `127.0.0.1` and is not reachable from other machines.
+- **Your upstreams, your keys**: requests go only to the providers you configured, using the credential the harness resolves for that route (`Authorization: Bearer …` or `x-api-key` at the upstream). This plugin stores no key and calls no other service.
+- **No telemetry**: beyond proxying your own requests and answering `GET /health` on the loopback, it makes no network calls.
+- **One local port**: enabling the route opens a single TCP port (default `8317`, `1024`–`65535`); no other system setting is changed.
+- **Compatibility**: Web and Desktop profiles of DeepSeek Harness (v0.1.x / v0.2.x and later), registered through the official `settings.models.footer` slot — no official package is replaced.
 
 ---
 
