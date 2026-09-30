@@ -10,7 +10,7 @@ export { LocalRouteCard } from './LocalRouteCard.tsx'
 export { en, zh } from './locales.ts'
 export type { ModelsKey } from './locales.ts'
 
-const NS = 'settings.models'
+const NS = 'dsh-models-plus'
 
 /**
  * Required services (cordis fiber inject).
@@ -33,6 +33,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.models.footer', () => ctx.slots.register({
     name: 'settings.models.footer',
     id: 'dsh-local-route-footer',
+    locale: NS,
     order: 100,
     inject: () => ({ ctx }),
   }, LocalRouteCard))

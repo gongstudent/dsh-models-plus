@@ -46,7 +46,13 @@ function resolveLocalRouteSettings(namespaces: any[]): LocalRouteNsInfo {
   }
 }
 
-export function LocalRouteCard({ ctx }: { ctx: Context }): ReactNode {
+export function LocalRouteCard({
+  ctx,
+  t: propsT,
+}: {
+  ctx?: Context
+  t?: (key: ModelsKey) => string
+}): ReactNode {
   const [enabled, setEnabled] = useState(false)
   const [portDraft, setPortDraft] = useState('8317')
   const [activePort, setActivePort] = useState(8317)
@@ -54,15 +60,21 @@ export function LocalRouteCard({ ctx }: { ctx: Context }): ReactNode {
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [nsInfo, setNsInfo] = useState<LocalRouteNsInfo | null>(null)
 
-  const lang = (ctx as any).locale?.getSnapshot?.()?.active ?? 'zh'
+  const lang = (ctx as any)?.locale?.getSnapshot?.()?.active ?? 'zh'
   const t = useCallback((key: ModelsKey): string => {
+    if (typeof propsT === 'function') {
+      try {
+        const val = propsT(key)
+        if (val) return val
+      } catch {}
+    }
     const dict = lang === 'zh' ? zh : en
     return dict[key] ?? en[key] ?? key
-  }, [lang])
+  }, [lang, propsT])
 
   const refresh = useCallback(async () => {
     try {
-      const remote = (ctx as any).remote
+      const remote = (ctx as any)?.remote
       if (!remote?.settings?.describe) return
       const res = await remote.settings.describe()
       if (res?.ok && res.value?.namespaces) {
@@ -79,7 +91,7 @@ export function LocalRouteCard({ ctx }: { ctx: Context }): ReactNode {
 
   useEffect(() => {
     void refresh()
-    const remote = (ctx as any).remote
+    const remote = (ctx as any)?.remote
     const off = remote?.$on?.('settings/document-updated', (ns: string) => {
       if (ns === 'dsh-local-route' || ns === 'llm-pi-ai') {
         void refresh()
@@ -96,7 +108,7 @@ export function LocalRouteCard({ ctx }: { ctx: Context }): ReactNode {
     setPending(true)
     setFailure(undefined)
     try {
-      const remote = (ctx as any).remote
+      const remote = (ctx as any)?.remote
       const targetNs = nsInfo?.ns ?? 'dsh-local-route'
       const ops = (nsInfo?.pathPrefix.length ?? 0) === 0
         ? [
@@ -107,7 +119,7 @@ export function LocalRouteCard({ ctx }: { ctx: Context }): ReactNode {
             { op: 'set', path: [...nsInfo!.pathPrefix], value: { enabled: nextEnabled, port: targetPort } },
           ]
 
-      const res = await remote.settings.mutate(targetNs, ops, nsInfo?.revision)
+      const res = await remote?.settings?.mutate(targetNs, ops, nsInfo?.revision)
       if (res?.ok) {
         setEnabled(nextEnabled)
         setActivePort(targetPort)
