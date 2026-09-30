@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import styles from './LocalRouteCard.module.css'
@@ -86,6 +86,7 @@ export function LocalRouteCard({
   const [providerError, setProviderError] = useState<string | null>(null)
   const [piAiRevision, setPiAiRevision] = useState<number | undefined>(undefined)
   const [rawProviders, setRawProviders] = useState<Record<string, any>>({})
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const lang = (ctx as any)?.locale?.getSnapshot?.()?.active ?? 'zh'
   const t = useCallback((key: ModelsKey): string => {
@@ -143,7 +144,7 @@ export function LocalRouteCard({
     return () => { off?.() }
   }, [ctx, refresh])
 
-  // 当选择的渠道发生变化时，更新当前表单数据
+  // 当选择的渠道发生变化时，回显该渠道的配置数据
   useEffect(() => {
     if (!selectedProvider || !rawProviders[selectedProvider]) return
     const cur = rawProviders[selectedProvider]
@@ -151,9 +152,15 @@ export function LocalRouteCard({
     setOutboundApi(cur.api ?? 'openai-completions')
     setHeadersText(cur.headers ? JSON.stringify(cur.headers, null, 2) : '')
     setBodyText(cur.bodyOverrides ? JSON.stringify(cur.bodyOverrides, null, 2) : '')
-    setProviderError(null)
-    setProviderSaveSuccess(false)
   }, [selectedProvider, rawProviders])
+
+  // 当用户主动切换渠道时才重置状态
+  const handleSelectProvider = (id: string) => {
+    if (successTimerRef.current) clearTimeout(successTimerRef.current)
+    setProviderSaveSuccess(false)
+    setProviderError(null)
+    setSelectedProvider(id)
+  }
 
   const parsedPort = /^\d+$/.test(portDraft) ? Number(portDraft) : Number.NaN
   const portValid = Number.isInteger(parsedPort) && parsedPort >= 1024 && parsedPort <= 65535
@@ -217,33 +224,33 @@ export function LocalRouteCard({
     if (!selectedProvider || !headersValid || !bodyValid || savingProvider) return
     setSavingProvider(true)
     setProviderError(null)
-    setProviderSaveSuccess(false)
+    if (successTimerRef.current) clearTimeout(successTimerRef.current)
 
     try {
       const remote = (ctx as any)?.remote
       const ops: any[] = []
       const basePath = ['providers', selectedProvider]
 
-      // 入站协议
+      // 本地路由对外协议 (inboundApi)
       if (inboundApi.length > 0) {
         ops.push({ op: 'set', path: [...basePath, 'inboundApi'], value: inboundApi })
       } else {
         ops.push({ op: 'unset', path: [...basePath, 'inboundApi'] })
       }
 
-      // 出站协议 (api)
+      // 上游模型协议 (api)
       if (outboundApi.length > 0) {
         ops.push({ op: 'set', path: [...basePath, 'api'], value: outboundApi })
       }
 
-      // 请求头
+      // 请求头 (headers)
       if (headerParse.value !== undefined) {
         ops.push({ op: 'set', path: [...basePath, 'headers'], value: headerParse.value })
       } else {
         ops.push({ op: 'unset', path: [...basePath, 'headers'] })
       }
 
-      // 请求体
+      // 请求体 (bodyOverrides)
       if (bodyParse.value !== undefined) {
         ops.push({ op: 'set', path: [...basePath, 'bodyOverrides'], value: bodyParse.value })
       } else {
@@ -253,7 +260,9 @@ export function LocalRouteCard({
       const res = await remote?.settings?.mutate('llm-pi-ai', ops, piAiRevision)
       if (res?.ok) {
         setProviderSaveSuccess(true)
-        setTimeout(() => setProviderSaveSuccess(false), 2000)
+        successTimerRef.current = setTimeout(() => {
+          setProviderSaveSuccess(false)
+        }, 3000)
       } else {
         setProviderError(res?.error?.message ?? '保存失败')
       }
@@ -351,7 +360,7 @@ export function LocalRouteCard({
                   cursor: 'pointer',
                 }}
                 value={selectedProvider}
-                onChange={e => setSelectedProvider(e.target.value)}
+                onChange={e => handleSelectProvider(e.target.value)}
               >
                 {providerList.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
@@ -361,38 +370,12 @@ export function LocalRouteCard({
 
             {selectedProvider && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--dsw-alias-bg-layer-1, rgba(0, 0, 0, 0.1))', padding: '12px', borderRadius: '8px', border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.08))' }}>
-                {/* 协议选择行 */}
+                {/* 协议选择行：上游模型协议 与 本地路由对外协议 */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                  {/* 1. 上游模型协议 */}
                   <div>
                     <div style={{ marginBottom: '4px' }}>
-                      <span className={styles.fieldLabel}>{t('inboundApi')}</span>
-                    </div>
-                    <select
-                      style={{
-                        width: '100%',
-                        height: '28px',
-                        padding: '0 8px',
-                        fontSize: '12px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.15))',
-                        background: 'var(--dsw-alias-bg-layer-2, rgba(255, 255, 255, 0.04))',
-                        color: 'var(--dsw-alias-label-primary, #fff)',
-                        outline: 'none',
-                        cursor: 'pointer',
-                      }}
-                      value={inboundApi}
-                      onChange={e => setInboundApi(e.target.value)}
-                    >
-                      <option value="">{t('inboundApiAuto')}</option>
-                      <option value="openai-completions">{t('protocolOpenAiCompletions')}</option>
-                      <option value="anthropic-messages">{t('protocolAnthropicMessages')}</option>
-                      <option value="openai-responses">{t('protocolOpenAiResponses')}</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <div style={{ marginBottom: '4px' }}>
-                      <span className={styles.fieldLabel}>{t('outboundApi')}</span>
+                      <span className={styles.fieldLabel}>{t('upstreamApi')}</span>
                     </div>
                     <select
                       style={{
@@ -408,8 +391,42 @@ export function LocalRouteCard({
                         cursor: 'pointer',
                       }}
                       value={outboundApi}
-                      onChange={e => setOutboundApi(e.target.value)}
+                      onChange={e => {
+                        setProviderSaveSuccess(false)
+                        setOutboundApi(e.target.value)
+                      }}
                     >
+                      <option value="openai-completions">{t('protocolOpenAiCompletions')}</option>
+                      <option value="anthropic-messages">{t('protocolAnthropicMessages')}</option>
+                      <option value="openai-responses">{t('protocolOpenAiResponses')}</option>
+                    </select>
+                  </div>
+
+                  {/* 2. 本地路由对外协议 */}
+                  <div>
+                    <div style={{ marginBottom: '4px' }}>
+                      <span className={styles.fieldLabel}>{t('localRouteClientApi')}</span>
+                    </div>
+                    <select
+                      style={{
+                        width: '100%',
+                        height: '28px',
+                        padding: '0 8px',
+                        fontSize: '12px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.15))',
+                        background: 'var(--dsw-alias-bg-layer-2, rgba(255, 255, 255, 0.04))',
+                        color: 'var(--dsw-alias-label-primary, #fff)',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                      value={inboundApi}
+                      onChange={e => {
+                        setProviderSaveSuccess(false)
+                        setInboundApi(e.target.value)
+                      }}
+                    >
+                      <option value="">{t('protocolAuto')}</option>
                       <option value="openai-completions">{t('protocolOpenAiCompletions')}</option>
                       <option value="anthropic-messages">{t('protocolAnthropicMessages')}</option>
                       <option value="openai-responses">{t('protocolOpenAiResponses')}</option>
@@ -440,7 +457,10 @@ export function LocalRouteCard({
                     }}
                     value={headersText}
                     placeholder={t('headersPlaceholder')}
-                    onChange={e => setHeadersText(e.target.value)}
+                    onChange={e => {
+                      setProviderSaveSuccess(false)
+                      setHeadersText(e.target.value)
+                    }}
                   />
                 </div>
 
@@ -467,7 +487,10 @@ export function LocalRouteCard({
                     }}
                     value={bodyText}
                     placeholder={t('bodyOverridesPlaceholder')}
-                    onChange={e => setBodyText(e.target.value)}
+                    onChange={e => {
+                      setProviderSaveSuccess(false)
+                      setBodyText(e.target.value)
+                    }}
                   />
                 </div>
 
@@ -505,16 +528,5 @@ export function LocalRouteCard({
         )}
       </div>
     </section>
-  )
-}
-
-import { CustomApiDraftPortal } from './CustomApiDraftPortal.tsx'
-
-export function LocalRouteFooterSection({ ctx }: { ctx?: Context }): ReactNode {
-  return (
-    <>
-      {ctx && <CustomApiDraftPortal ctx={ctx} />}
-      {ctx && <LocalRouteCard ctx={ctx} />}
-    </>
   )
 }
