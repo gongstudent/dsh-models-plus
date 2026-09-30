@@ -2,136 +2,59 @@
 
 English | [中文](README.zh.md)
 
-A DeepSeek Harness profile bundle that provides:
-1. **Loopback Local Route** (configurable proxy server, default port `8317`) — seamlessly bridges DeepSeek Harness models with OpenAI- and Anthropic-compatible clients (e.g. Cline, Claude Dev, cursor, etc.).
-2. **Models Settings Page Enhancements** — search box for model discovery, one-click bulk deselect, and an optimistic toggle for the local route that eliminates UI stutter.
-
-Packaged as a 2-in-1 drop-in bundle: install once, and both host-side local route proxy and frontend UI enhancements are fully activated.
+DeepSeek Harness loopback local route extension plugin, integrated via the official `settings.models.footer` extension slot:
+1. **Loopback Local Route Proxy**: Provides a configurable local proxy service (default `8317`), bridging OpenAI and Anthropic protocols to models configured in Harness, allowing external clients like Cline, Claude Dev, Cursor, and LibreChat to connect seamlessly.
+2. **Zero-Conflict UI Extension**: Seamlessly attaches to the bottom of Settings -> Models using DSH's official slot extension contract, preserving all official features (built-in model search, bulk select/deselect, DeepSeek Account login, etc.), **completely eliminating version update breakages and blank screen issues**.
 
 ---
 
-## Features
+## Highlights
 
-### 1. Loopback Local Route Proxy (Configurable Port, default: `8317`)
-- **Protocol Translation**: Converts OpenAI (`/v1/chat/completions`, `/v1/responses`) and Anthropic (`/v1/messages`) requests to configured DSH provider profiles.
-- **Health Check & Route Discovery**: `GET /health` lists active provider routes and status.
-- **Port Customization**: Freely configurable via Web UI Settings -> Models -> Local Route port input or in `settings.yaml` (ports `1024`–`65535`, defaults to `8317`). Changes take effect dynamically without restarting the server.
+### 1. Local Route Proxy (Configurable port, default `8317`)
+- **Bidirectional protocol bridge**: Translates incoming OpenAI (`/v1/chat/completions`, `/v1/responses`) and Anthropic (`/v1/messages`) requests to active DSH providers.
+- **Health check & route discovery**: `GET /health` inspects available routes and server status.
+- **Dynamic port configuration**: Easily toggle on/off and customize port (`1024`–`65535`) directly from the Models settings page with instant hot reload.
 
-### 2. Models Settings Page Enhancements
-| Feature | Upstream Behaviour | dsh-models-plus |
-|---|---|---|
-| Model Search | Long candidate list without filtering | Real-time search box filters candidate models by id |
-| Bulk Deselect | Click checkboxes one by one | **Deselect all** clears all picks, including those filtered out |
-| Local Route Switch | Stutters and remounts on settings revision | Optimistic on/off toggle with instant feedback and zero stutter |
-| Empty Results | Blank space | Clear "No matching models" indicator |
+### 2. Long-term Slot-based Architecture
+- **Zero intrusive replacement**: Does not disable or replace core DSH packages (`ui-settings-models` or `llm-pi-ai`), ensuring upstream updates and improvements work out of the box.
+- **Cross-platform & version resilient**: Works reliably on both DSH Web and Desktop (v0.1.x, v0.2.x, and future releases).
 
 ---
 
-## Installation (Windows / macOS / Linux)
+## Installation Guide (Windows / macOS / Linux)
 
-### Prerequisites
+### Requirements
 - Node.js >= 22
 - Git
 - pnpm
 
-### Step 1: Install DeepSeek Harness (Pinned Version)
-For npm-based installations, install `@deepseek-ai/dsh@0.1.1-rc.2` (the stable base matching this host adapter):
+### One-line Installation
+Run in terminal:
 
 ```sh
-npm install -g @deepseek-ai/dsh@0.1.1-rc.2
-```
-
-*(Note: If you build DeepSeek Harness from source checkout, no version pin is needed).*
-
-### Step 2: Install this Plugin Bundle
-In your terminal, run:
-
-```sh
-# If dsh is installed globally:
+# For Web profile:
 dsh plugin --profile web add -w github:gongstudent/dsh-models-plus
 
-# For users running via npx:
-npx @deepseek-ai/dsh plugin --profile web add -w github:gongstudent/dsh-models-plus
+# For Desktop profile:
+dsh plugin --profile desktop add -w github:gongstudent/dsh-models-plus
 ```
 
-Or via HTTPS / pinned tag:
-
-```sh
-dsh plugin --profile web add -w https://github.com/gongstudent/dsh-models-plus.git
-dsh plugin --profile web add -w github:gongstudent/dsh-models-plus#v1.0.0
-```
-
-> **Note for first-time install**: pnpm enforces a supply-chain check on packages with install scripts (`@google/genai`, `protobufjs`). If pnpm prompts:
-> ```
-> [ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @google/genai, protobufjs
-> ```
-> Simply open your profile's workspace file (located at `~/.dsh/profiles/web/pnpm-workspace.yaml`, or `%USERPROFILE%\.dsh\profiles\web\pnpm-workspace.yaml` on Windows) and add:
-> ```yaml
-> allowBuilds:
->   '@google/genai': true
->   protobufjs: true
-> ```
-> Then re-run the `dsh plugin --profile web add ...` command.
-
-### Step 3: Launch
-Start the Web UI:
-
+Start Harness:
 ```sh
 dsh web
 ```
 
-Both the Local Route proxy and the customized Models settings page will be active!
+Navigate to Settings -> Models; the Local Route Proxy card is ready at the bottom of the page!
 
 ---
 
-## Verifying the Installation
-
-### 1. Verify Local Route Proxy
-With `dsh web` running and Local Route enabled in settings:
+## Verification
 
 ```sh
-# Replace <port> with your configured port (default is 8317)
-curl http://127.0.0.1:<port>/health
+curl http://127.0.0.1:8317/health
 ```
 
-Response:
+Response example:
 ```json
-{"status":"ok","host":"127.0.0.1","routes":["..."]}
+{"status":"ok","host":"127.0.0.1","routes":["deepseek","openai","anthropic"]}
 ```
-
-### 2. Verify Models Page UI
-1. Open the Web GUI in your browser (default: `http://127.0.0.1:3080`).
-2. Navigate to **Settings** -> **Models**.
-3. Under any provider (e.g. DeepSeek or Custom), click **Discover Models** to see the search bar and batch selection buttons.
-
-### 3. Verify Composition without Booting
-```sh
-dsh --profile web --dump-config | grep -B1 -A2 'llm-pi-ai\|ui-settings-models'
-```
-
----
-
-## Uninstallation
-
-To remove the bundle and restore the original shipped components:
-
-```sh
-dsh plugin --profile web remove dsh-models-plus
-```
-
-The shipped `llm-pi-ai` and `ui-settings-models` were only *disabled* by the bundle patch, so removing the bundle immediately restores both.
-
----
-
-## Architecture
-
-This package is a dual-face bundle:
-- **Host half** (`lib/index.js`): Replaces `llm-pi-ai` to provide the configurable loopback proxy HTTP server (default `8317`), route dispatcher, and multi-provider protocol conversion.
-- **Browser half** (`lib/client.js`): Discovered automatically via `dsh.client` in `package.json`, compiled as a standalone CJS module loaded by Cordis Web module loader at runtime.
-- **Bundle patch** (`cordis.patch.yml`): Disables the upstream rows and mounts this unified plugin seamlessly.
-
----
-
-## License
-
-MIT

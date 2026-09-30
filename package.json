@@ -1,7 +1,7 @@
 {
   "name": "dsh-models-plus",
-  "version": "1.0.0",
-  "description": "DeepSeek Harness profile bundle: adds a configurable loopback local route proxy for OpenAI/Anthropic APIs, and enhances the Models settings page with search, bulk deselect, and smooth switching.",
+  "version": "1.1.0",
+  "description": "DeepSeek Harness profile bundle: adds a configurable loopback local route proxy for OpenAI/Anthropic APIs, integrated via settings.models.footer slot.",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
@@ -17,7 +17,7 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-models",
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-api-remotes"
       ],

@@ -1,15 +1,7 @@
 # DeepSeek Harness profile bundle: dsh-models-plus
-# 1. Disables the shipped Models settings UI row.
-# 2. Replaces the shipped llm-pi-ai host adapter with this package,
-#    which provides the loopback local route (configurable port, default 8317) AND
-#    registers the customized Models settings UI into the browser graph.
-
-- id: ui-settings-models
-  disabled: true
-
-- id: llm-pi-ai
-  disabled: true
+# 提供独立的本地路由代理服务，并通过官方 settings.models.footer 插槽将控制卡片嵌入模型设置页面。
+# 完全保留官方原生的 ui-settings-models 和 llm-pi-ai，保证无缝兼容与自动升级。
 
 - insert:
-    - id: llm-pi-ai-local-route
+    - id: dsh-local-route
       name: dsh-models-plus
