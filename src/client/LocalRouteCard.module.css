@@ -68,7 +68,7 @@
 }
 
 .routeSwitchTrack[data-on='true'] {
-  background: var(--dsw-alias-state-business-primary, #4d6bfe);
+  background: var(--dsw-alias-label-primary, #ffffff);
 }
 
 .routeSwitchThumb {
@@ -83,6 +83,7 @@
 }
 
 .routeSwitchTrack[data-on='true'] .routeSwitchThumb {
+  background: var(--dsw-alias-bg-layer-1, #1e1e1e);
   transform: translateX(16px);
 }
 
@@ -119,7 +120,7 @@
 }
 
 .input:focus {
-  border-color: var(--dsw-alias-state-business-primary, #4d6bfe);
+  border-color: var(--dsw-alias-border-l3, rgba(255, 255, 255, 0.4));
 }
 
 .input:disabled {
