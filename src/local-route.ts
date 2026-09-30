@@ -509,10 +509,11 @@ function selectRoute(
   }
 
   const candidates = [...profiles.entries()].flatMap(([provider, profile]) => {
-    if (profile.inboundApi !== inbound) return []
+    if (profile.inboundApi !== undefined && profile.inboundApi.length > 0 && profile.inboundApi !== inbound) return []
     const model = profile.piProvider.getModels().find(candidate => candidate.id === modelId)
-    if (model === undefined || !isLocalRouteProtocol(model.api)) return []
-    return [{ provider, profile, model, inbound, outbound: model.api }]
+    const outbound = model?.api ?? profile.api
+    if (model === undefined || !isLocalRouteProtocol(outbound)) return []
+    return [{ provider, profile, model, inbound, outbound: outbound as LocalRouteProtocol }]
   })
   if (selector !== undefined) {
     const selected = candidates.find(candidate => candidate.provider === selector)

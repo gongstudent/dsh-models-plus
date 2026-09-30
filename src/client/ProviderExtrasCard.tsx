@@ -41,6 +41,8 @@ export function ProviderExtrasCard(props: ProviderCardProps): ReactNode {
   }
 
   const [open, setOpen] = useState(false)
+  const [inboundApi, setInboundApi] = useState<string>('')
+  const [outboundApi, setOutboundApi] = useState<string>('openai-completions')
   const [headersText, setHeadersText] = useState('')
   const [bodyText, setBodyText] = useState('')
   const [saving, setSaving] = useState(false)
@@ -74,6 +76,8 @@ export function ProviderExtrasCard(props: ProviderCardProps): ReactNode {
           setRevision(ns.revision)
           const profile = ns.value.providers?.[providerId]
           if (profile) {
+            setInboundApi(profile.inboundApi ?? '')
+            setOutboundApi(profile.api ?? 'openai-completions')
             setHeadersText(profile.headers ? JSON.stringify(profile.headers, null, 2) : '')
             setBodyText(profile.bodyOverrides ? JSON.stringify(profile.bodyOverrides, null, 2) : '')
           }
@@ -109,12 +113,26 @@ export function ProviderExtrasCard(props: ProviderCardProps): ReactNode {
       const ops: any[] = []
       const basePath = ['providers', providerId]
 
+      // 入站协议
+      if (inboundApi.length > 0) {
+        ops.push({ op: 'set', path: [...basePath, 'inboundApi'], value: inboundApi })
+      } else {
+        ops.push({ op: 'unset', path: [...basePath, 'inboundApi'] })
+      }
+
+      // 出站协议 (api)
+      if (outboundApi.length > 0) {
+        ops.push({ op: 'set', path: [...basePath, 'api'], value: outboundApi })
+      }
+
+      // 请求头
       if (headerParse.value !== undefined) {
         ops.push({ op: 'set', path: [...basePath, 'headers'], value: headerParse.value })
       } else {
         ops.push({ op: 'unset', path: [...basePath, 'headers'] })
       }
 
+      // 请求体
       if (bodyParse.value !== undefined) {
         ops.push({ op: 'set', path: [...basePath, 'bodyOverrides'], value: bodyParse.value })
       } else {
@@ -149,6 +167,40 @@ export function ProviderExtrasCard(props: ProviderCardProps): ReactNode {
 
       {open && (
         <div className={styles.content}>
+          {/* 入站协议 */}
+          <div className={styles.field}>
+            <div className={styles.fieldLabelRow}>
+              <span className={styles.fieldLabel}>{t('inboundApi')}</span>
+            </div>
+            <select
+              className={styles.select}
+              value={inboundApi}
+              onChange={e => setInboundApi(e.target.value)}
+            >
+              <option value="">{t('inboundApiAuto')}</option>
+              <option value="openai-completions">{t('protocolOpenAiCompletions')}</option>
+              <option value="anthropic-messages">{t('protocolAnthropicMessages')}</option>
+              <option value="openai-responses">{t('protocolOpenAiResponses')}</option>
+            </select>
+          </div>
+
+          {/* 出站协议 */}
+          <div className={styles.field}>
+            <div className={styles.fieldLabelRow}>
+              <span className={styles.fieldLabel}>{t('outboundApi')}</span>
+            </div>
+            <select
+              className={styles.select}
+              value={outboundApi}
+              onChange={e => setOutboundApi(e.target.value)}
+            >
+              <option value="openai-completions">{t('protocolOpenAiCompletions')}</option>
+              <option value="anthropic-messages">{t('protocolAnthropicMessages')}</option>
+              <option value="openai-responses">{t('protocolOpenAiResponses')}</option>
+            </select>
+          </div>
+
+          {/* 自定义请求头 */}
           <div className={styles.field}>
             <div className={styles.fieldLabelRow}>
               <span className={styles.fieldLabel}>{t('headers')}</span>
@@ -163,6 +215,7 @@ export function ProviderExtrasCard(props: ProviderCardProps): ReactNode {
             />
           </div>
 
+          {/* 自定义请求体 */}
           <div className={styles.field}>
             <div className={styles.fieldLabelRow}>
               <span className={styles.fieldLabel}>{t('bodyOverrides')}</span>

@@ -50,6 +50,24 @@
   color: var(--dsw-alias-label-secondary, rgba(255, 255, 255, 0.7));
 }
 
+.select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(255, 255, 255, 0.15));
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1, rgba(0, 0, 0, 0.2));
+  color: var(--dsw-alias-label-primary, #ffffff);
+  outline: none;
+  cursor: pointer;
+}
+
+.select:focus {
+  border-color: var(--dsw-alias-border-l3, rgba(255, 255, 255, 0.4));
+}
+
 .textarea {
   box-sizing: border-box;
   width: 100%;
