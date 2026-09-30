@@ -69,5 +69,23 @@ curl http://127.0.0.1:<端口>/health
 
 成功返回示例：
 ```json
-{"status":"ok","host":"127.0.0.1","routes":["deepseek","openai","anthropic"]}
+{"status":"ok","host":"127.0.0.1","routes":["deepseek","openai","anthropic"],"endpoints":["/v1/chat/completions","/v1/responses","/v1/messages"]}
 ```
+
+---
+
+## 开发
+
+```sh
+pnpm install            # 仅安装构建工具链；@deepseek-ai/* 宿主包保持外部依赖
+pnpm typecheck          # 对 src/ 与 build/ 执行 tsc --noEmit
+pnpm smoke              # 对本地路由代理执行行为冒烟测试（上游为桩服务）
+pnpm build              # 重新构建 lib/（宿主部分 + 客户端 bundle）
+```
+
+- **`lib/` 是刻意提交的**：树外客户端插件直接由它提供文件，因此改动源码后必须执行
+  `pnpm build`，并把重建后的 `lib/` 一并提交。
+- **构建结果可复现**：CSS Module 类名与 bundle 内记录的模块路径都是仓库相对路径，
+  同一份源码在不同目录构建出的产物逐字节一致。
+- `pnpm prepare-src [checkout] [--dry-run]` 用于从 harness 检出目录重新同步
+  内置的适配器模块；它不会触碰 `src/index.ts` 与 `src/client/**`（属于本插件自身）。

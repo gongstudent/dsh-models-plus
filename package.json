@@ -33,13 +33,23 @@
   "scripts": {
     "prepare-src": "node scripts/prepare-src.mjs",
     "build": "tsdown",
-    "watch": "tsdown --watch"
+    "watch": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node --experimental-transform-types scripts/smoke-local-route.mjs"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
     "@deepseek-ai/dsh-client-store": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-credentials": "0.0.1-rc.1",
+    "@deepseek-ai/dsh-invariants": "0.0.1-rc.1",
+    "@deepseek-ai/dsh-llm": "0.0.1-rc.1",
+    "@deepseek-ai/dsh-timeout": "0.0.1-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
+    "@types/node": "^22.20.4",
+    "@types/react": "^19.3.0",
     "lightningcss": "^1.33.0",
-    "tsdown": "^0.23.0"
+    "tsdown": "^0.23.0",
+    "typescript": "5.9.3"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.82.1"

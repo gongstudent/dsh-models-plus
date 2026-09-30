@@ -25,6 +25,13 @@ const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
 
 /**
+ * Physical stylesheet behind each virtual id, by virtual id. The id itself is
+ * spelled repo-relative (so no machine-local path reaches the artifact), while
+ * reading and watching need the real path.
+ */
+const cssFiles = new Map<string, string>()
+
+/**
  * Wire/type layers a client bundle may inline: browser-safe contracts
  * with no runtime identity to share (no Symbol/instanceof/singleton state).
  * Everything else under @deepseek-ai/* is either a module-table entry
@@ -53,6 +60,19 @@ const SKIP_WORKSPACE_BUILD: UserConfig = { entry: '' }
 export const CLIENT_EXTERNALS: readonly string[] = [...PLATFORM_MODULES]
 
 const REPOSITORY_ROOT = fileURLToPath(new URL('..', import.meta.url))
+
+/**
+ * Repository-relative, slash-separated spelling of a physical path.
+ *
+ * Build artifacts are committed, so nothing machine-local may reach them: an
+ * absolute path would make the emitted bytes differ per checkout directory
+ * (rolldown prints virtual module ids in its region comments, and lightningcss
+ * derives CSS-Module class hashes from the filename it is handed), turning
+ * every rebuild on another machine into a spurious diff.
+ */
+function repositoryRelative(absolute: string): string {
+  return relative(REPOSITORY_ROOT, absolute).split(sep).join('/')
+}
 
 /** Rebase a physical lib-relative source onto a browser URL that mirrors the repository directories. */
 function browserSourcePath(source: string, sourcemapPath: string): string {
@@ -83,7 +103,10 @@ export function clientBundle(
   libEntry: readonly string[],
   options: ClientBundleOptions = {},
 ): BuildFaceConfig {
-  const lib = clientLibraryConfig(id, libEntry, options.lib)
+  const lib = clientLibraryConfig(id, libEntry, {
+    ...options.lib,
+    ...options.deps === undefined ? {} : { deps: options.deps },
+  })
   return ({ env }) => {
     const face = buildFace(env?.DSH_BUILD_FACE)
     const client = clientConfig(id, face === undefined
@@ -123,8 +146,14 @@ interface ClientBundleOptions {
   readonly hostPhase?: boolean
   /** Additional Node-side configs emitted alongside the package library. */
   readonly companions?: readonly UserConfig[]
-  /** Overrides for the package's primary Node-side library config. */
+  /**
+   * Overrides for the package's primary Node-side library config. Spread at the
+   * top level of that config, so keys are tsdown options (deps, platform), not
+   * a nested lib object.
+   */
   readonly lib?: UserConfig
+  /** Dependency handling for the node half (deps.neverBundle and friends). */
+  readonly deps?: UserConfig['deps']
 }
 
 type BuildFace = 'host' | 'client' | undefined
@@ -171,7 +200,18 @@ function clientConfig(id: string, entry: string): UserConfig {
     // must carry the TS/TSX mapping consumed by browser profiling tools.
     sourcemap: true,
     clean: false,
-    external: [...CLIENT_EXTERNALS],
+    deps: {
+      // The loader module table answers these specifiers at runtime; anything
+      // else the client bundle inlines is listed under alwaysBundle below.
+      neverBundle: [...CLIENT_EXTERNALS],
+      // tsdown auto-externalizes package dependencies; anything NOT in the
+      // loader module table must inline instead (wire/type layers, zod, clsx —
+      // every non-shared dep). A require() the table cannot answer is a
+      // guaranteed runtime throw, so the rule is the table list itself: no
+      // opinion for table entries (neverBundle above wins), bundle everything
+      // else.
+      alwaysBundle: (id: string) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),
+    },
     // Browser bundles inline node-idiom deps (zustand/immer read
     // process.env.NODE_ENV; zustand's esm build also probes
     // import.meta.env.MODE, which a CJS output cannot carry — rolldown flags
@@ -187,12 +227,6 @@ function clientConfig(id: string, entry: string): UserConfig {
       'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env': JSON.stringify({ MODE: process.env.NODE_ENV ?? 'production' }),
     },
-    // tsdown auto-externalizes package dependencies; anything NOT in the
-    // loader module table must inline instead (wire/type layers, zod, clsx —
-    // every non-shared dep). A require() the table cannot answer is a
-    // guaranteed runtime throw, so the rule is the table list itself: no
-    // opinion for table entries (external above wins), bundle everything else.
-    noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),
     plugins: [{
       // Bundle purity gate (build-time mirror of the module-edge rules):
       // platform seed entries stay external, inline-safe wire layers inline,
@@ -216,22 +250,37 @@ function clientConfig(id: string, entry: string): UserConfig {
       resolveId(source: string, importer: string | undefined) {
         if (!source.endsWith('.module.css')) return null
         const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
-        return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+        // The virtual id is what rolldown repeats in its region comments and
+        // what resolves back to a file below, so it is spelled relative to the
+        // repository: an absolute id would stamp the build machine's directory
+        // into every committed artifact.
+        const virtualId = CSS_VIRTUAL_PREFIX + repositoryRelative(abs) + CSS_VIRTUAL_SUFFIX
+        cssFiles.set(virtualId, abs)
+        return virtualId
       },
       async load(virtualId: string) {
         if (!virtualId.startsWith(CSS_VIRTUAL_PREFIX)) return null
-        const fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+        const relativeId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+        const fileId = cssFiles.get(virtualId) ?? resolvePath(REPOSITORY_ROOT, relativeId)
         // The virtual id otherwise hides the physical stylesheet from Rolldown's watch graph.
         this.addWatchFile(fileId)
         const source = await readFile(fileId)
         const { code, exports: cssExports } = transform({
-          filename: fileId,
+          // A repository-relative filename, not the absolute one: lightningcss
+          // hashes class names from it, so the absolute path would give every
+          // checkout its own class names and dirty the committed bundle.
+          filename: relativeId,
           code: source,
           cssModules: { pattern: '[hash]_[local]' },
           minify: true,
         })
         const classMap: Record<string, string> = {}
-        for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
+        // Sorted, because lightningcss hands its exports back in an order that
+        // varies between runs: emitted as-is, two builds of identical sources
+        // differ in the committed bundle's bytes alone.
+        for (const [local, exp] of Object.entries(cssExports ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+          classMap[local] = exp.name
+        }
         // One <style data-plugin> per module file; idempotent under re-evaluation.
         return [
           `const css = ${JSON.stringify(code.toString())};`,

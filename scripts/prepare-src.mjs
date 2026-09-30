@@ -1,49 +1,98 @@
 /**
- * Re-sync sources from a DeepSeek Harness checkout into ./src.
+ * Re-sync the upstream pi-ai adapter sources this package vendors into ./src.
  *
- * Copies:
- * 1. packages/llm/llm-pi-ai/src/* -> ./src/ (host adapter + local route)
- * 2. packages/client/ui-settings-models/src/* -> ./src/client/ (Models UI)
- * 3. Rewrites package identifiers in invariant.ts
+ * Copies the host adapter modules from a DeepSeek Harness checkout into ./src,
+ * so a harness upgrade can be picked up without hand-merging each file.
  *
- * Usage: node scripts/prepare-src.mjs [path-to-dsh-checkout]
+ * ## What is plugin-owned and must never be synced
+ *
+ * - `src/index.ts` — this package's own plugin entry (Config/apply). The
+ *   checkout's `index.ts` is the upstream *adapter* entry, which registers a
+ *   completely different plugin; copying it silently replaces this package.
+ * - `src/client/**` — the Local Route settings card, its locales and its
+ *   stylesheet are written here, not derived from the checkout. The checkout's
+ *   `ui-settings-models` client is the official Models page, not this card.
+ *
+ * An earlier revision copied both, which would have destroyed the plugin.
+ * Anything added to the lists below must be a file this package merely vendors.
+ *
+ * Usage: node scripts/prepare-src.mjs [path-to-dsh-checkout] [--dry-run]
+ *   Checkout defaults to $DSH_CHECKOUT, then ../deepseek-harness-fork.
  * @module dsh-models-plus/prepare-src
  */
-import { cp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const checkout = resolve(process.argv[2] ?? process.env.DSH_CHECKOUT ?? join(root, '..', 'deepseek-harness-fork'))
+const argv = process.argv.slice(2)
+const dryRun = argv.includes('--dry-run')
+const checkoutArg = argv.find(argument => !argument.startsWith('-'))
+const checkout = resolve(checkoutArg ?? process.env.DSH_CHECKOUT ?? join(root, '..', 'deepseek-harness-fork'))
 const hostSource = join(checkout, 'packages', 'llm', 'llm-pi-ai', 'src')
-const clientSource = join(checkout, 'packages', 'client', 'ui-settings-models', 'src')
+const target = join(root, 'src')
 
-if (!existsSync(hostSource) || !existsSync(clientSource)) {
-  process.stderr.write('prepare-src: sources not found in checkout\n')
+/**
+ * Vendored host modules, in the order the adapter imports them. A file absent
+ * from the checkout is reported rather than fatal: the upstream set changes
+ * between releases, and a missing optional module must not stop the sync of the
+ * ones that are there.
+ */
+const HOST_FILES = [
+  'catalog.ts',
+  'config.ts',
+  'discovery.ts',
+  'invariant.ts',
+  'local-route.ts',
+  'provider.ts',
+]
+
+if (!existsSync(hostSource)) {
+  process.stderr.write(`prepare-src: host sources not found at ${hostSource}\n`)
   process.exit(1)
 }
 
-const target = join(root, 'src')
+let copied = 0
+let changed = 0
 
-// Copy host files
-for (const f of ['adapter.ts', 'catalog.ts', 'config.ts', 'context.ts', 'discovery.ts', 'index.ts', 'invariant.ts', 'local-route.ts', 'provider.ts', 'replay.ts', 'stream.ts']) {
-  await cp(join(hostSource, f), join(target, f))
+for (const file of HOST_FILES) {
+  const from = join(hostSource, file)
+  const to = join(target, file)
+  if (!existsSync(from)) {
+    process.stdout.write(`prepare-src: skip ${file} (not in this checkout)\n`)
+    continue
+  }
+  const incoming = await readFile(from)
+  const current = existsSync(to) ? await readFile(to) : undefined
+  if (current?.equals(incoming) === true) {
+    process.stdout.write(`prepare-src: unchanged ${file}\n`)
+    continue
+  }
+  // A file that differs is either upstream moving on or a local fix that this
+  // sync is about to drop; the report names it so the diff can be reviewed
+  // before it is committed.
+  process.stdout.write(`prepare-src: ${current === undefined ? 'add' : 'OVERWRITE'} ${file}\n`)
+  copied += 1
+  if (current !== undefined) changed += 1
+  if (!dryRun) await cp(from, to)
 }
 
-// Copy client files
-await cp(join(clientSource, 'client'), join(target, 'client'), { recursive: true })
-await cp(join(clientSource, 'onboarding-copy.ts'), join(target, 'onboarding-copy.ts'))
-await cp(join(clientSource, 'css-modules.d.ts'), join(target, 'css-modules.d.ts'))
-
-// Rename invariant identifiers
-const invPath = join(target, 'invariant.ts')
-const invContent = await readFile(invPath, 'utf8')
-await writeFile(
-  invPath,
-  invContent
+// The invariant companion names the package it reserves ownership of, and the
+// checkout spells it as the upstream package.
+const invariantPath = join(target, 'invariant.ts')
+if (existsSync(invariantPath)) {
+  const before = await readFile(invariantPath, 'utf8')
+  const after = before
     .replace('@deepseek-ai/dsh-llm-pi-ai', 'dsh-models-plus')
-    .replace('llm-pi-ai-invariant', 'models-plus-invariant'),
-)
+    .replace('llm-pi-ai-invariant', 'models-plus-invariant')
+  if (after === before) {
+    process.stdout.write('prepare-src: invariant.ts already carries this package name\n')
+  } else {
+    process.stdout.write('prepare-src: rewrote invariant.ts package identifiers\n')
+    if (!dryRun) await writeFile(invariantPath, after)
+  }
+}
 
-console.log('prepare-src: completed successfully')
+process.stdout.write(`prepare-src: ${dryRun ? 'dry run, ' : ''}${copied} file(s) to write, ${changed} overwriting local content\n`)
+if (dryRun) process.stdout.write('prepare-src: nothing was written (--dry-run)\n')

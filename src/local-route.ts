@@ -9,6 +9,15 @@ export type LocalRouteProtocol = 'openai-completions' | 'openai-responses' | 'an
 
 const HOST = '127.0.0.1'
 const MAX_BODY_BYTES = 10 * 1024 * 1024
+/** {@link MAX_BODY_BYTES} spelled for the refusal a caller reads. */
+const MAX_BODY_LABEL = '10 MiB'
+/**
+ * How long the upstream endpoint may take to *answer* before the request is
+ * abandoned. It bounds the wait for response headers alone: a stream that has
+ * already started is never cut off mid-answer, which is what a whole-request
+ * deadline would do to a long completion.
+ */
+const UPSTREAM_HEADER_TIMEOUT_MS = 120_000
 const SELECTOR_HEADER = 'x-dsh-provider'
 const PROTOCOL_PATHS: Readonly<Record<LocalRouteProtocol, string>> = {
   'openai-completions': '/v1/chat/completions',
@@ -27,12 +36,55 @@ export interface LocalRouteServerOptions {
   logger?: LocalRouteLogger
 }
 
+/** One model, as the route's own pi-ai provider reports it. */
+type RouteModel = ReturnType<ResolvedPiAiProviderProfile['piProvider']['getModels']>[number]
+
 interface SelectedRoute {
   provider: string
   profile: ResolvedPiAiProviderProfile
-  model: ReturnType<ResolvedPiAiProviderProfile['piProvider']['getModels']>[number]
+  model: RouteModel
   inbound: LocalRouteProtocol
   outbound: LocalRouteProtocol
+}
+
+/** One route able to serve a given model id, decided once per route set. */
+interface RouteCandidate {
+  provider: string
+  profile: ResolvedPiAiProviderProfile
+  model: RouteModel
+  outbound: LocalRouteProtocol
+}
+
+/**
+ * A route set plus the model-id index built from it.
+ *
+ * Building the index costs one pass over every configured model, so it is built
+ * when the route set is replaced and reused for every request against it: a
+ * request then filters the handful of routes exposing the model it names,
+ * instead of walking every profile and re-materializing each catalog.
+ */
+interface RouteIndex {
+  /** The route set this index describes; identity decides when to rebuild. */
+  source: ReadonlyMap<string, ResolvedPiAiProviderProfile>
+  byModel: ReadonlyMap<string, readonly RouteCandidate[]>
+}
+
+/** Index one route set by the model ids its routes can serve. */
+function buildRouteIndex(source: ReadonlyMap<string, ResolvedPiAiProviderProfile>): RouteIndex {
+  const byModel = new Map<string, RouteCandidate[]>()
+  for (const [provider, profile] of source) {
+    for (const model of profile.piProvider.getModels()) {
+      const outbound = model.api ?? profile.api
+      // A model whose protocol this proxy cannot convert is not a local route:
+      // it stays reachable through Harness, just not through this endpoint.
+      if (!isLocalRouteProtocol(outbound)) continue
+      const candidate: RouteCandidate = { provider, profile, model, outbound }
+      const bucket = byModel.get(model.id)
+      if (bucket === undefined) byModel.set(model.id, [candidate])
+      else bucket.push(candidate)
+    }
+  }
+  return { source, byModel }
 }
 
 interface CanonicalResponse {
@@ -494,7 +546,7 @@ function endpoint(baseURL: string, protocol: LocalRouteProtocol): string {
 }
 
 function selectRoute(
-  profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>,
+  index: RouteIndex,
   inbound: LocalRouteProtocol,
   body: Record<string, unknown>,
   headers: IncomingHttpHeaders,
@@ -508,19 +560,18 @@ function selectRoute(
     throw new LocalRouteRequestError('Request body must contain a non-empty model.', 400)
   }
 
-  const candidates = [...profiles.entries()].flatMap(([provider, profile]) => {
-    if (profile.inboundApi !== undefined && profile.inboundApi.length > 0 && profile.inboundApi !== inbound) return []
-    const model = profile.piProvider.getModels().find(candidate => candidate.id === modelId)
-    const outbound = model?.api ?? profile.api
-    if (model === undefined || !isLocalRouteProtocol(outbound)) return []
-    return [{ provider, profile, model, inbound, outbound: outbound as LocalRouteProtocol }]
-  })
+  // A route that pinned its caller-facing protocol only answers that protocol;
+  // one that pinned none accepts every protocol the proxy can convert.
+  const candidates = (index.byModel.get(modelId) ?? []).filter(candidate =>
+    candidate.profile.inboundApi === undefined
+    || candidate.profile.inboundApi.length === 0
+    || candidate.profile.inboundApi === inbound)
   if (selector !== undefined) {
     const selected = candidates.find(candidate => candidate.provider === selector)
     if (selected === undefined) {
       throw new LocalRouteRequestError(`Provider "${selector}" does not expose model "${modelId}" through ${inbound}.`, 404)
     }
-    return selected
+    return { ...selected, inbound }
   }
   if (candidates.length === 0) {
     throw new LocalRouteRequestError(`No local route exposes model "${modelId}" through ${inbound}.`, 404)
@@ -531,7 +582,7 @@ function selectRoute(
       400,
     )
   }
-  return candidates[0] as SelectedRoute
+  return { ...(candidates[0] as RouteCandidate), inbound }
 }
 
 async function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
@@ -540,7 +591,7 @@ async function readBody(request: IncomingMessage): Promise<Record<string, unknow
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array)
     size += buffer.byteLength
-    if (size > MAX_BODY_BYTES) throw new Error('Request body exceeds the 10 MiB local-route limit.')
+    if (size > MAX_BODY_BYTES) throw new Error(`Request body exceeds the ${MAX_BODY_LABEL} local-route limit.`)
     chunks.push(buffer)
   }
   let parsed: unknown
@@ -591,10 +642,41 @@ function writeError(response: ServerResponse, protocol: LocalRouteProtocol | und
   }
 }
 
+/**
+ * Write one chunk, honoring the socket's backpressure. Resolves once the chunk
+ * was accepted or the buffer drained, and rejects when the caller disappeared
+ * or the response failed — without this, a slow client lets an upstream stream
+ * accumulate in this process's memory without bound.
+ */
+function writeChunk(response: ServerResponse, chunk: Uint8Array): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (response.write(chunk)) {
+      resolve()
+      return
+    }
+    const settle = (error?: Error): void => {
+      response.off('drain', onDrain)
+      response.off('error', onError)
+      response.off('close', onClose)
+      if (error === undefined) resolve()
+      else reject(error)
+    }
+    const onDrain = (): void => { settle() }
+    const onError = (error: Error): void => { settle(error) }
+    const onClose = (): void => { settle(new Error('client disconnected before the response drained')) }
+    response.once('drain', onDrain)
+    response.once('error', onError)
+    response.once('close', onClose)
+  })
+}
+
 async function pipeResponse(upstream: Response, response: ServerResponse): Promise<void> {
   const headers: Record<string, string> = {}
   for (const [name, value] of upstream.headers) {
-    if (name.toLowerCase() !== 'content-length' && name.toLowerCase() !== 'content-encoding') headers[name] = value
+    const lower = name.toLowerCase()
+    // `fetch` has already decoded the body, so a length or encoding the
+    // upstream declared no longer describes the bytes written here.
+    if (lower !== 'content-length' && lower !== 'content-encoding') headers[name] = value
   }
   response.writeHead(upstream.status, headers)
   if (upstream.body === null) {
@@ -603,14 +685,22 @@ async function pipeResponse(upstream: Response, response: ServerResponse): Promi
   }
   const reader = upstream.body.getReader()
   try {
-    while (true) {
+    for (;;) {
       const result = await reader.read()
       if (result.done) break
-      response.write(result.value)
+      await writeChunk(response, result.value)
     }
+    response.end()
+  } catch (error) {
+    // A broken upstream or a vanished caller must not read as a complete
+    // answer: destroying the response makes the client see the connection
+    // fail, where a plain `end()` would hand it a truncated body it takes
+    // for the whole answer.
+    await reader.cancel().catch(() => {})
+    if (!response.destroyed) response.destroy(error instanceof Error ? error : new Error(String(error)))
+    throw error
   } finally {
     reader.releaseLock()
-    response.end()
   }
 }
 
@@ -672,10 +762,16 @@ async function handleProxy(
   request: IncomingMessage,
   response: ServerResponse,
   options: LocalRouteServerOptions,
+  index: RouteIndex,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', `http://${HOST}`)
   if (request.method === 'GET' && url.pathname === '/health') {
-    writeJson(response, 200, { status: 'ok', host: HOST, routes: [...options.profiles().keys()] })
+    writeJson(response, 200, {
+      status: 'ok',
+      host: HOST,
+      routes: [...options.profiles().keys()],
+      endpoints: Object.values(PROTOCOL_PATHS),
+    })
     return
   }
   const inbound = protocolOfPath(url.pathname)
@@ -690,8 +786,26 @@ async function handleProxy(
     writeError(response, inbound, 400, error)
     return
   }
+
+  // The caller owns the lifetime of the upstream call: a client that hangs up
+  // mid-answer must not leave a stream running to a provider that is still
+  // being billed for it, and an endpoint that never answers must not pin the
+  // request forever.
+  const abort = new AbortController()
+  let clientGone = false
+  const onClientClose = (): void => {
+    if (response.writableEnded) return
+    clientGone = true
+    abort.abort(new Error('local route: the caller disconnected before the response was sent'))
+  }
+  response.on('close', onClientClose)
+  let headerTimer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+    abort.abort(new Error(`local route: the upstream endpoint did not answer within ${UPSTREAM_HEADER_TIMEOUT_MS / 1000} s`))
+  }, UPSTREAM_HEADER_TIMEOUT_MS)
+  headerTimer.unref?.()
+
   try {
-    const route = selectRoute(options.profiles(), inbound, body, request.headers)
+    const route = selectRoute(index, inbound, body, request.headers)
     const apiKey = await options.resolveApiKey(route.provider, route.profile)
     const inboundStream = body['stream'] === true
     const cleanBody = { ...body }
@@ -709,7 +823,11 @@ async function handleProxy(
       method: 'POST',
       headers: upstreamHeaders(request, route, apiKey),
       body: JSON.stringify(outboundBody),
+      signal: abort.signal,
     })
+    // Headers arrived: the answer may now stream for as long as it likes.
+    clearTimeout(headerTimer)
+    headerTimer = undefined
     if (!upstream.ok) {
       await pipeResponse(upstream, response)
       return
@@ -726,7 +844,28 @@ async function handleProxy(
     if (inboundStream) writeSyntheticStream(response, route.inbound, converted)
     else writeJson(response, upstream.status, converted)
   } catch (error) {
-    writeError(response, inbound, error instanceof LocalRouteRequestError ? error.status : 502, error)
+    if (clientGone) {
+      // Nobody is listening any more; there is no answer to write.
+      if (!response.destroyed) response.destroy()
+      return
+    }
+    if (response.headersSent || response.destroyed) {
+      // The response was already committed (a stream that broke midway), so an
+      // error document can no longer be sent; failing the connection is the
+      // only honest signal left.
+      if (!response.destroyed) response.destroy(error instanceof Error ? error : new Error(String(error)))
+      return
+    }
+    const timedOut = abort.signal.aborted
+    writeError(
+      response,
+      inbound,
+      timedOut ? 504 : error instanceof LocalRouteRequestError ? error.status : 502,
+      timedOut ? abort.signal.reason : error,
+    )
+  } finally {
+    if (headerTimer !== undefined) clearTimeout(headerTimer)
+    response.off('close', onClientClose)
   }
 }
 
@@ -735,8 +874,21 @@ export class LocalRouteServer {
   private server: Server | undefined
   private activePort: number | undefined
   private transition: Promise<void> = Promise.resolve()
+  /** Model-id index for the route set currently held by {@link options}. */
+  private index: RouteIndex | undefined
 
   constructor(private readonly options: LocalRouteServerOptions) {}
+
+  /**
+   * The index for the current route set, rebuilt only when the set itself is
+   * replaced. The route set is a stable object between configuration
+   * revisions, so identity is what decides: an unchanged set costs a lookup.
+   */
+  private routeIndex(): RouteIndex {
+    const source = this.options.profiles()
+    if (this.index?.source !== source) this.index = buildRouteIndex(source)
+    return this.index
+  }
 
   /** Actual listening port; useful for diagnostics and port-zero tests. */
   get port(): number | undefined {
@@ -754,7 +906,16 @@ export class LocalRouteServer {
       }
       if (this.server !== undefined && this.activePort === port) return
       const candidate = createServer((request, response) => {
-        void handleProxy(request, response, this.options).catch((error: unknown) => {
+        let index: RouteIndex
+        try {
+          // Index construction is synchronous, so a throw here would escape the
+          // promise chain below and reach the process as an uncaught exception.
+          index = this.routeIndex()
+        } catch (error: unknown) {
+          writeError(response, undefined, 500, error)
+          return
+        }
+        void handleProxy(request, response, this.options, index).catch((error: unknown) => {
           if (!response.headersSent) writeError(response, undefined, 500, error)
           else response.destroy(error instanceof Error ? error : new Error(String(error)))
         })

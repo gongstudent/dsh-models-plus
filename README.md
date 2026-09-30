@@ -56,5 +56,26 @@ curl http://127.0.0.1:8317/health
 
 Response example:
 ```json
-{"status":"ok","host":"127.0.0.1","routes":["deepseek","openai","anthropic"]}
+{"status":"ok","host":"127.0.0.1","routes":["deepseek","openai","anthropic"],"endpoints":["/v1/chat/completions","/v1/responses","/v1/messages"]}
 ```
+
+---
+
+## Development
+
+```sh
+pnpm install            # toolchain only; the @deepseek-ai/* host packages are external
+pnpm typecheck          # tsc --noEmit over src/ and build/
+pnpm smoke              # behavioural checks for the proxy against a stubbed upstream
+pnpm build              # rebuilds lib/ (host half + client bundle)
+```
+
+- **`lib/` is committed on purpose**: an out-of-tree client plugin is served
+  straight from it, so a source change must be followed by `pnpm build` and the
+  rebuilt `lib/` committed alongside it.
+- **The build is deterministic**: CSS Module class names and the module paths
+  the bundle records are repository-relative, so the same sources build to
+  byte-identical artifacts in any checkout directory.
+- `pnpm prepare-src [checkout] [--dry-run]` re-syncs the vendored adapter
+  modules from a harness checkout. It never touches `src/index.ts` or
+  `src/client/**`, which are this plugin's own.
