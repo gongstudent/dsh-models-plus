@@ -35,8 +35,8 @@ function parseJsonObject(text: string): { ok: boolean; value?: Record<string, un
 export function ProviderExtrasCard(props: ProviderCardProps): ReactNode {
   const { ctx, provider } = props
 
-  // 排除官方 DeepSeek 账号卡片，自定义渠道与第三方渠道均正常支持
-  if (provider?.provider === 'deepseek-account' || provider?.provider === 'deepseek-official') {
+  // 严格约束：仅在「自定义模型 API」卡片上显示（即 declared === true），不在第三方模型提供商或预置渠道显示
+  if (provider?.declared !== true) {
     return null
   }
 

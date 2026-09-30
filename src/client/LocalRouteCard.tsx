@@ -507,3 +507,14 @@ export function LocalRouteCard({
     </section>
   )
 }
+
+import { CustomApiDraftPortal } from './CustomApiDraftPortal.tsx'
+
+export function LocalRouteFooterSection({ ctx }: { ctx?: Context }): ReactNode {
+  return (
+    <>
+      {ctx && <CustomApiDraftPortal ctx={ctx} />}
+      {ctx && <LocalRouteCard ctx={ctx} />}
+    </>
+  )
+}
